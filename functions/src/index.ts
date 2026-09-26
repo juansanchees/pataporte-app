@@ -13,7 +13,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { guidePrompt, guideSchema, MONTHLY_LIMITS, parseAiJson, PHOTO_SCHEMA, photoPrompt, type PhotoLists } from './shared/aiPrompts';
+import { CARD_SCHEMA, cardPrompt, guidePrompt, guideSchema, MONTHLY_LIMITS, parseAiJson, PHOTO_SCHEMA, photoPrompt, type PhotoLists } from './shared/aiPrompts';
 import { gemini, openai, openaiTranscribe, ProviderError, type AiRequest, type Media } from './providers';
 
 initializeApp();
@@ -40,15 +40,15 @@ function monthNow(): string {
 }
 
 /** Reserva 1 uso do mês (transação). Devolve uma função que estorna se a IA falhar. */
-async function reserve(uid: string, kind: 'guide' | 'photo'): Promise<() => Promise<void>> {
+async function reserve(uid: string, kind: 'guide' | 'photo' | 'card'): Promise<() => Promise<void>> {
   const db = getFirestore();
   const ref = db.collection('usage').doc(uid);
   const month = monthNow();
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    const d = snap.exists && snap.get('month') === month ? snap.data()! : { month, guide: 0, photo: 0 };
+    const d = snap.exists && snap.get('month') === month ? snap.data()! : { month, guide: 0, photo: 0, card: 0 };
     if ((d[kind] ?? 0) >= MONTHLY_LIMITS[kind]) {
-      throw new HttpsError('resource-exhausted', kind === 'guide' ? 'Você usou as perguntas deste mês.' : 'Você usou as leituras de foto deste mês.');
+      throw new HttpsError('resource-exhausted', kind === 'guide' ? 'Você usou as perguntas deste mês.' : kind === 'card' ? 'Você usou as leituras de carteirinha deste mês.' : 'Você usou as leituras de foto deste mês.');
     }
     tx.set(ref, { ...d, month, [kind]: (d[kind] ?? 0) + 1, updatedAt: new Date() });
   });
@@ -125,6 +125,18 @@ export const aiTask = onCall(
       try {
         const r = await run(async () => ({ prompt: photoPrompt(l), schema: PHOTO_SCHEMA, image }));
         logger.info('foto', { uid, provider: r.provider, model: r.model });
+        return r.raw;
+      } catch (e) { await refund(); throw e; }
+    }
+
+    if (task === 'card') {
+      const image = media(d.image, 'foto', /^image\//);
+      if (!image) throw new HttpsError('invalid-argument', 'foto faltando');
+      const species = d.species === 'cat' ? 'cat' as const : 'dog' as const;
+      const refund = await reserve(uid, 'card');
+      try {
+        const r = await run(async () => ({ prompt: cardPrompt(species), schema: CARD_SCHEMA, image }));
+        logger.info('carteirinha', { uid, provider: r.provider, model: r.model });
         return r.raw;
       } catch (e) { await refund(); throw e; }
     }

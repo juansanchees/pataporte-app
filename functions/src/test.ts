@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { gemini, openai, ProviderError } from './providers';
-import { guidePrompt, parseAiJson } from './shared/aiPrompts';
+import { cardPrompt, guidePrompt, parseAiJson } from './shared/aiPrompts';
 
 type Handler = (url: string, init?: RequestInit) => { status: number; body: unknown };
 function mockFetch(h: Handler) {
@@ -45,4 +45,16 @@ test('OpenAI: usa o primeiro modelo disponível e manda a foto', async () => {
 test('prompt do Guia: áudio pede transcrição; texto leva a pergunta', () => {
   assert.match(guidePrompt({ audio: true, context: '', history: [] }), /transcript/);
   assert.match(guidePrompt({ question: 'Pode comer uva?', context: '', history: [] }), /PERGUNTA: Pode comer uva\?/);
+});
+
+test('prompt da carteirinha: menciona a espécie e nunca invente data', () => {
+  assert.match(cardPrompt('dog'), /cachorro/);
+  assert.match(cardPrompt('cat'), /gato/);
+  assert.match(cardPrompt('dog'), /NUNCA invente uma data/);
+});
+
+test('carteirinha: parseAiJson lê a resposta da IA e mantém os itens', () => {
+  const raw = parseAiJson('```json\n{"isCard": true, "items": [{"kind":"vacina","name":"V10","matched":"v10","date":"2026-03-10","confidence":0.9}]}\n```');
+  assert.equal(raw?.isCard, true);
+  assert.equal((raw?.items as { matched: string }[])[0].matched, 'v10');
 });

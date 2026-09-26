@@ -97,6 +97,54 @@ export function guideSchema(audio: boolean) {
   };
 }
 
+export type CardItemKind = 'vacina' | 'vermifugo' | 'antipulga' | 'outro';
+export type CardMatched = 'v10' | 'v8' | 'antirrabica' | 'gripe' | 'giardia' | 'v4' | 'v5' | 'felv' | 'outra';
+export interface CardItem { kind: CardItemKind; name: string; matched: CardMatched; date: string | null; confidence: number }
+
+/** Prompt para ler a foto da carteirinha de vacinação (papel) e extrair os itens (§3 do spec). */
+export function cardPrompt(species: 'dog' | 'cat'): string {
+  return `Você está olhando a foto de uma carteirinha de vacinação de ${species === 'cat' ? 'gato' : 'cachorro'} (caderneta de papel brasileira), com adesivos/carimbos de vacinas, vermífugos e antipulgas, e datas escritas à mão pelo veterinário.
+
+TAREFA:
+1. Primeiro confira se a foto é mesmo de uma carteirinha/caderneta de vacinação (adesivos, carimbos, tabela de vacinas). Se não for, responda isCard: false e items: [].
+2. Se for, liste cada item (vacina, vermífugo ou antipulga) que você conseguir identificar, com a data aplicada.
+
+REGRAS PARA LER:
+- Marcas comerciais (ex.: Vanguard, Nobivac, Versican, Defensor) NÃO são o que interessa: identifique o TIPO genérico da vacina pelo nome do adesivo/carimbo (ex.: "V10", "V8", "Antirrábica", "Gripe canina", "Giárdia", "V4", "V5"/"Tríplice+FeLV").
+- matched deve ser um destes: "v10", "v8", "antirrabica", "gripe", "giardia", "v4", "v5", "felv", ou "outra" se não encaixar em nenhum.
+- kind: "vacina" para vacinas, "vermifugo" para vermífugos (verminoses), "antipulga" para antipulgas/carrapaticidas, "outro" para qualquer outro item da carteirinha.
+- Datas: leia exatamente como estão escritas (normalmente DD/MM/AA ou DD/MM/AAAA). Ano com 2 dígitos: 00–39 = 20XX, 40–99 = 19XX. Sempre devolva no formato YYYY-MM-DD.
+- NUNCA invente uma data. Se a data estiver ilegível, rasurada ou faltando, use date: null.
+- confidence de 0 a 1: quanto você tem certeza da leitura (tipo da vacina + data). Use confidence menor que 0.7 sempre que a letra manuscrita estiver difícil de ler, borrada ou ambígua.
+
+Responda SOMENTE em JSON com os campos:
+- isCard: true se a foto é de uma carteirinha/caderneta de vacinação
+- items: lista de { kind, name (nome como está escrito/impresso na carteirinha), matched, date, confidence }`;
+}
+
+/** Formato de resposta (padrão do Gemini) para a leitura da carteirinha. */
+export const CARD_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    isCard: { type: 'BOOLEAN' },
+    items: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          kind: { type: 'STRING', enum: ['vacina', 'vermifugo', 'antipulga', 'outro'] },
+          name: { type: 'STRING' },
+          matched: { type: 'STRING', enum: ['v10', 'v8', 'antirrabica', 'gripe', 'giardia', 'v4', 'v5', 'felv', 'outra'] },
+          date: { type: 'STRING', nullable: true },
+          confidence: { type: 'NUMBER' },
+        },
+        required: ['kind', 'name', 'matched', 'date', 'confidence'],
+      },
+    },
+  },
+  required: ['isCard', 'items'],
+};
+
 /** Lê o JSON da IA mesmo quando vem "sujo" (```json, texto antes/depois, lista). */
 export function parseAiJson(text: string): Record<string, unknown> | null {
   const clean = text.replace(/```(json)?/gi, '').trim();
@@ -111,4 +159,4 @@ export function parseAiJson(text: string): Record<string, unknown> | null {
 }
 
 /** Limites da v1 grátis (o servidor confere; o app só mostra). */
-export const MONTHLY_LIMITS = { guide: 30, photo: 20 };
+export const MONTHLY_LIMITS = { guide: 30, photo: 20, card: 20 };

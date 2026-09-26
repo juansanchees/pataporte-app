@@ -6,7 +6,7 @@ import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { resolvePhotoUri } from './photos';
 import { CAT_BREEDS, DETAIL_OPTIONS, DOG_BREEDS, breedsFor, findBreed } from '@/domain/catalog';
 import type { PetDetails, PetSize, Species, UrgencyLevel } from '@/domain/types';
-import { guidePrompt, guideSchema, parseAiJson, PHOTO_SCHEMA, photoPrompt, type PhotoLists } from '@/shared/aiPrompts';
+import { CARD_SCHEMA, cardPrompt, guidePrompt, guideSchema, parseAiJson, PHOTO_SCHEMA, photoPrompt, type CardItem, type PhotoLists } from '@/shared/aiPrompts';
 import { getApp } from 'firebase/app';
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -296,6 +296,39 @@ export async function analyzePetPhoto(img: { data: string; mime: string }): Prom
     mixes: breed === 'SRD' && Array.isArray(raw.mixes) ? (raw.mixes as unknown[]).map(String).map((m) => findBreed(species, m)?.name).filter((m): m is string => !!m && m !== 'SRD').slice(0, 2) : [],
     summary: String(raw.summary ?? ''),
   };
+}
+
+// ------------------------------------------------------------------ foto da carteirinha (§3)
+export interface VaccineCardResult { isCard: boolean; items: CardItem[] }
+
+const CARD_KINDS = ['vacina', 'vermifugo', 'antipulga', 'outro'] as const;
+const CARD_MATCHED = ['v10', 'v8', 'antirrabica', 'gripe', 'giardia', 'v4', 'v5', 'felv', 'outra'] as const;
+
+/** Lê a foto da carteirinha de vacinação (papel) e devolve os itens encontrados (baixa confiança = "confira a data"). */
+export async function readVaccineCard(imageUri: string, species: Species): Promise<VaccineCardResult> {
+  if (!(await ensureAiConsent())) throw new AiError('badinput', 'sem consentimento');
+  const img = await imageForAi(imageUri);
+  let raw: Record<string, unknown>;
+  if (serverMode()) {
+    raw = await callServer<Record<string, unknown>>({ task: 'card', image: img, species });
+  } else {
+    const parts: Part[] = [{ inline_data: { mime_type: img.mime, data: img.data } }, { text: cardPrompt(species) }];
+    raw = parseJson<Record<string, unknown>>(await generate(parts, CARD_SCHEMA));
+  }
+  const items: CardItem[] = Array.isArray(raw.items)
+    ? (raw.items as unknown[]).map((it) => {
+        const o = (it ?? {}) as Record<string, unknown>;
+        const date = typeof o.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.date) ? o.date : null;
+        return {
+          kind: pick(o.kind, CARD_KINDS, 'outro'),
+          name: String(o.name ?? '').slice(0, 60),
+          matched: pick(o.matched, CARD_MATCHED, 'outra'),
+          date,
+          confidence: Math.max(0, Math.min(1, Number(o.confidence ?? 0))),
+        };
+      })
+    : [];
+  return { isCard: raw.isCard === true, items };
 }
 
 // ------------------------------------------------------------------ guia de bordo
