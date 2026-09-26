@@ -6,8 +6,8 @@ import { isPuppy, nextDoseFromAnswer, vaccinePlan, vaccinesFor, planSeries } fro
 import { nextFromDuration, durationMonths, parasiteTimeline } from '../src/domain/parasites';
 import { doseStatus, doseTimes, dosesForDay, hasNightDose, suggestShift, summary, statusForGiven, shiftMinutes } from '../src/domain/meds';
 import { canRedeemMonth, careStreak, mapProgress, milesSummary, seasonLevel, streakBonusDue, earned, milesFor, extraWalkEarns, EXTRA_WALK_REF } from '../src/domain/gamification';
-import { activeTrialEnd, can, effectivePlan, itemById, itemState, limitsFor, paywallTrigger, trialNoticeAt, PAID_PLANS, PLANS, PRICES } from '../src/domain/commerce';
-import { agendaByMonth, agoraItem, nextVaccine, progress, todayItems, occursOn } from '../src/domain/today';
+import { activeTrialEnd, can, effectivePlan, syncedStorePlan, itemById, itemState, limitsFor, paywallTrigger, trialNoticeAt, PAID_PLANS, PLANS, PRICES } from '../src/domain/commerce';
+import { agendaByMonth, agoraItem, nextVaccine, progress, todayItems, occursOn, vaccinesSummary } from '../src/domain/today';
 import { migrateCare, migratePetData } from '../src/domain/migrate';
 import { setNextDate, stampCare } from '../src/domain/itinerary';
 import type { Care, DoseLog, LedgerEntry, MedSchedule, Pet, Reminder } from '../src/domain/types';
@@ -336,4 +336,35 @@ test('teste grátis: aviso 2 dias antes; some se a classe mudar', () => {
   assert.equal(activeTrialEnd({ plan: 'primeira', source: 'loja', trialEndsAt: end, until: '2027-10-03T12:00:00Z' }, now), null);
   assert.equal(trialNoticeAt({ plan: 'primeira', source: 'simulado', trialEndsAt: end }, 9, now), null);
   assert.equal(trialNoticeAt({ plan: 'economica', source: 'trial', trialEndsAt: new Date('2026-09-27T12:00:00').toISOString() }, 9, now), null);
+});
+
+// ------------------------------------------------------------------ QA v1.1
+test('vacinas da Home: opcional nunca tomada não entra no total', () => {
+  const cs = [
+    care({ code: 'V10', lastDate: '2026-01-10', nextDate: '2027-01-10' }),
+    care({ code: 'ARB', lastDate: '2026-03-15', nextDate: '2027-03-15' }),
+    care({ code: 'GRP', nextDate: '2026-10-03' }),
+    care({ code: 'GIA', active: false }),
+  ];
+  assert.equal(vaccinesSummary(cs, T).label, '2 de 3');
+});
+
+test('loja (RevenueCat): renovação mantém a Primeira, expiração volta para a Econômica', () => {
+  const now = new Date('2026-09-26T12:00:00Z');
+  const sub = { plan: 'economica' as const, planState: { plan: 'primeira' as const, source: 'loja' as const, until: '2026-09-20T00:00:00Z', period: 'anual' as const } };
+  // venceu no app, mas a loja renovou → nova validade, continua Primeira
+  const ren = syncedStorePlan(sub, { active: true, isTrial: false, expiresAt: '2027-09-20T00:00:00Z' }, now)!;
+  assert.equal(ren.planState!.until, '2027-09-20T00:00:00Z');
+  assert.equal(effectivePlan(ren, now), 'primeira');
+  // mesma validade → nada a gravar
+  assert.equal(syncedStorePlan(ren, { active: true, isTrial: false, expiresAt: '2027-09-20T00:00:00Z' }, now), null);
+  // expirou → Econômica (e teste continua "usado", sem dar acesso)
+  const trial = { plan: 'economica' as const, planState: { plan: 'primeira' as const, source: 'loja' as const, until: '2026-10-01T00:00:00Z', trialEndsAt: '2026-10-01T00:00:00Z' } };
+  const exp = syncedStorePlan(trial, { active: false, isTrial: false, expiresAt: null }, now)!;
+  assert.equal(effectivePlan(exp, now), 'economica');
+  assert.ok(exp.planState!.trialEndsAt);
+  assert.equal(syncedStorePlan(exp, { active: false, isTrial: false, expiresAt: null }, now), null);
+  // teste simulado e milhas não são tocados
+  assert.equal(syncedStorePlan({ plan: 'economica', planState: { plan: 'primeira', source: 'milhas', until: '2026-10-20T00:00:00Z' } }, { active: false, isTrial: false, expiresAt: null }, now), null);
+  assert.equal(syncedStorePlan({ plan: 'economica', planState: { plan: 'primeira', source: 'trial', trialEndsAt: '2026-10-01T00:00:00Z' } }, { active: false, isTrial: false, expiresAt: null }, now), null);
 });

@@ -7,7 +7,7 @@ import { Page, PageHeader } from '@/components/passport';
 import { Button, ChipRow, InfoNote, SectionTitle, T } from '@/components/ui';
 import { Icon, type IconName } from '@/art/Icon';
 import { FAMILY_PLAN, PAID_PLANS, PLANS, trialDaysLeft } from '@/domain/commerce';
-import { restore } from '@/services/purchases';
+import { purchasesMode, restore } from '@/services/purchases';
 import { track } from '@/services/analytics';
 import { CityField } from '@/components/v11/premium/common';
 import { C } from '@/theme';
@@ -68,7 +68,7 @@ export default function Ajustes() {
     try {
       const r = await restore();
       track('restaurar_compra', { gatilho: 'ajustes', ok: r.ok });
-      if (r.ok) { await useApp.getState().setPlan('primeira'); useApp.getState().showToast('Compra restaurada. Boa viagem na Primeira Classe!'); }
+      if (r.ok) { if (purchasesMode() === 'real') await useApp.getState().applyStorePurchase({ isTrial: r.isTrial, expiresAt: r.expiresAt }); else await useApp.getState().setPlan('primeira'); useApp.getState().showToast('Compra restaurada. Boa viagem na Primeira Classe!'); }
       else useApp.getState().showToast('Não encontramos uma compra nesta conta da loja.');
     } finally { setRestoring(false); }
   };

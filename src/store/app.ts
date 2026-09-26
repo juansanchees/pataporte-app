@@ -6,7 +6,7 @@ import { backend, newId, type AuthUser, type Collection } from '@/data';
 import { careTypesFor, emissionCareTypes, foodLabel, milesForCategory, codeFromName, mealTimesFor } from '@/domain/catalog';
 import { generateItinerary, historyOf, makeCareStamp, setNextDate, stampCare, rotationFor, type HistoryWhen } from '@/domain/itinerary';
 import { canRedeemMonth, destinationById, earned, EXTRA_WALK_REF, extraWalkEarns, levelFor, mapProgress, milesSummary, milesTotals, MILES, REDEEM_COST, REDEEM_MONTHS, streakBonusDue, type DestinationId, type MapProgress, type MilesReason, type MilesSummary, type RedeemCheck } from '@/domain/gamification';
-import { effectivePlan, equip, itemById, itemState, limitsFor, paywallTrigger, pendingRewards, trialNoticeAt, unequip, PRICES, type PaywallEvent, type PlanLimits } from '@/domain/commerce';
+import { effectivePlan, equip, itemById, syncedStorePlan, itemState, limitsFor, paywallTrigger, pendingRewards, trialNoticeAt, unequip, PRICES, type PaywallEvent, type PlanLimits } from '@/domain/commerce';
 import { applyVaccineAnswer, planSeries, vaccineById, vaccinePlan, nextDoseFromAnswer, type NextDose, type PlanOptions, type VaccineId, type VaccinePlan } from '@/domain/vaccines';
 import { durationMonths, nextFromDuration, PARASITE_CODE, type ParasiteKind, type ParasiteNext } from '@/domain/parasites';
 import { doseKey, onTime, scheduleTimes, shiftMinutes, statusForGiven, suggestShift } from '@/domain/meds';
@@ -198,6 +198,12 @@ interface State {
   setVet(vet: { name?: string; phone: string } | null): Promise<void>;
   /** Compra real na loja (RevenueCat): grava planState.source='loja' + until (e o fim do teste, se for teste). */
   applyStorePurchase(p: { isTrial: boolean; expiresAt: string | null; period?: 'mensal' | 'anual' }): Promise<void>;
+  /**
+   * Estado atual da assinatura na loja (RevenueCat), lido ao abrir o app, ao voltar para ele e quando a loja avisa.
+   * Ativa → renova a validade (applyStorePurchase). Inativa → quem era assinante da loja volta para a Econômica.
+   * Teste simulado, mês comprado com milhas e modo simulado não são tocados.
+   */
+  syncStorePlan(s: { active: boolean; isTrial: boolean; expiresAt: string | null }): Promise<void>;
 
   setDraftVaccine(id: string, answer: VaccineAnswer): NextDose;
   setDraftParasite(kind: ParasiteKind, last: LastAnswer, duration: ParasiteDuration): ParasiteNext;
@@ -1132,6 +1138,14 @@ export const useApp = create<State>((set, get) => {
         ...(period ?? st?.period ? { period: period ?? st?.period } : {}),
       };
       await saveProfile({ ...pr, planState });
+      reschedule();
+    },
+    async syncStorePlan(status) {
+      const pr = get().profile;
+      if (!pr) return;
+      const next = syncedStorePlan(pr, status);
+      if (!next) return;
+      await saveProfile({ ...pr, ...next });
       reschedule();
     },
 

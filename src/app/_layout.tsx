@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View } from 'react-native';
+import { AppState, View } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -12,6 +12,7 @@ import { SpaceMono_400Regular, SpaceMono_700Bold } from '@expo-google-fonts/spac
 import { useApp } from '@/store/app';
 import { configureNotifications, registerNotificationHandler, type NotificationActionEvent } from '@/services/notifications';
 import { identify, track } from '@/services/analytics';
+import { customerStatus, initPurchases, onEntitlementChange, purchasesMode } from '@/services/purchases';
 import { StampBurst, StampDateSheet, Toast } from '@/components/overlays';
 import { IntroRevealHost } from '@/components/v11/home/IntroReveal';
 import { PendingPaywallHost } from '@/components/v11/premium/PendingPaywall';
@@ -65,6 +66,22 @@ export default function RootLayout() {
     }).catch(() => {});
   }, []);
   useEffect(() => { if (uid) identify(uid); }, [uid]);
+
+  // assinatura na loja (RevenueCat): confere ao abrir, ao voltar para o app e quando a loja avisa uma mudança,
+  // para quem renovou continuar na Primeira Classe e quem expirou voltar para a Econômica. Modo simulado: nada.
+  const hasProfile = useApp((s) => !!s.profile);
+  useEffect(() => {
+    if (!uid || !hasProfile || purchasesMode() !== 'real') return;
+    let alive = true;
+    const sync = async () => {
+      const s = await customerStatus();
+      if (alive && s && useApp.getState().user?.uid === uid) await useApp.getState().syncStorePlan(s);
+    };
+    initPurchases(uid).then(sync).catch(() => {});
+    const off = onEntitlementChange(() => { sync().catch(() => {}); });
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') sync().catch(() => {}); });
+    return () => { alive = false; off(); sub.remove(); };
+  }, [uid, hasProfile]);
 
   // navegação a partir das notificações (só depois que os dados carregaram)
   const booted = useApp((s) => s.booted);

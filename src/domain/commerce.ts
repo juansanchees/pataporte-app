@@ -117,6 +117,36 @@ export function effectivePlan(profile: Pick<UserProfile, 'plan' | 'planState'> |
   return profile.plan;
 }
 
+/** Situação da assinatura na loja (RevenueCat). */
+export interface StoreStatus { active: boolean; isTrial: boolean; expiresAt: string | null }
+
+/**
+ * Sincroniza o plano salvo com a loja (renovação / expiração). Devolve o que gravar, ou null se nada mudou.
+ * - ativa: planState vira { primeira, loja, until = validade da loja } (renovou → validade nova).
+ * - inativa: só quem era assinante da loja (source 'loja') volta para a Econômica; o fim do teste fica no passado
+ *   (continua "teste já usado", mas não dá mais acesso). Teste simulado e mês pago com milhas não são tocados.
+ */
+export function syncedStorePlan(pr: Pick<UserProfile, 'plan' | 'planState'>, s: StoreStatus, now: Date = new Date()): Pick<UserProfile, 'plan' | 'planState'> | null {
+  const st = pr.planState;
+  if (s.active) {
+    const trialEnd = s.isTrial && s.expiresAt ? s.expiresAt : st?.trialEndsAt;
+    if (st?.source === 'loja' && st.plan === 'primeira' && (st.until ?? null) === s.expiresAt && (st.trialEndsAt ?? null) === (trialEnd ?? null)) return null;
+    const planState: PlanState = {
+      plan: 'primeira', source: 'loja',
+      ...(s.expiresAt ? { until: s.expiresAt } : {}),
+      ...(trialEnd ? { trialEndsAt: trialEnd } : {}),
+      ...(st?.period ? { period: st.period } : {}),
+    };
+    return { plan: pr.plan, planState };
+  }
+  if (st?.source !== 'loja') return null;
+  const nowIso = now.toISOString();
+  const trialEnd = st.trialEndsAt && st.trialEndsAt > nowIso ? nowIso : st.trialEndsAt;
+  if (st.plan === 'economica' && !st.until && trialEnd === st.trialEndsAt && pr.plan !== 'primeira') return null;
+  const { until: _until, trialEndsAt: _trial, ...rest } = st;
+  return { plan: pr.plan === 'primeira' ? 'economica' : pr.plan, planState: { ...rest, plan: 'economica', source: 'loja', ...(trialEnd ? { trialEndsAt: trialEnd } : {}) } };
+}
+
 /** Dias restantes do teste grátis (0 = sem teste). */
 export function trialDaysLeft(profile: Pick<UserProfile, 'planState'> | null | undefined, now: Date = new Date()): number {
   const end = profile?.planState?.trialEndsAt;

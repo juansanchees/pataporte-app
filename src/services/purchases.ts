@@ -129,16 +129,27 @@ export async function restore(): Promise<PurchaseResult> {
   }
 }
 
-/** A pessoa é Primeira Classe agora? */
-export async function hasPrimeira(): Promise<boolean> {
-  if (!wantsReal()) return simulated.active;
+export interface CustomerStatus { active: boolean; isTrial: boolean; expiresAt: string | null }
+
+/**
+ * Situação da assinatura na loja agora (renovou? expirou?). null = não deu para saber (sem internet, SDK falhou):
+ * nesse caso NÃO mexa no plano salvo. No modo simulado devolve o estado local da sessão.
+ */
+export async function customerStatus(): Promise<CustomerStatus | null> {
+  if (!wantsReal()) return { active: simulated.active, isTrial: simulated.isTrial, expiresAt: simulated.expiresAt };
   try {
     const Purchases = await loadSdk();
     const info = await Purchases.getCustomerInfo();
-    return ENTITLEMENT in (info?.entitlements?.active ?? {});
+    const ent = info?.entitlements?.active?.[ENTITLEMENT];
+    return { active: !!ent, isTrial: ent?.periodType === 'TRIAL', expiresAt: ent?.expirationDate ?? null };
   } catch {
-    return false;
+    return null;
   }
+}
+
+/** A pessoa é Primeira Classe agora? */
+export async function hasPrimeira(): Promise<boolean> {
+  return (await customerStatus())?.active ?? false;
 }
 
 /** Avisa quando o status de Primeira Classe muda (compra, expiração, restauração). */
