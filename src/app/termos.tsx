@@ -14,6 +14,20 @@ const SECTIONS: [string, string[]][] = [
     'Seu nome e e-mail, para entrar na conta.',
     'Os dados dos seus pets que você mesmo escreve: nome, raça, nascimento, peso, saúde, vacinas, rotina, diário e viagens.',
     'As fotos do pet ficam no seu celular e ganham uma cópia de segurança na sua conta, na nuvem (só você acessa). Assim você não perde nada ao trocar de celular.',
+    'Se você quiser: a sua cidade (para o ranking) e o telefone do seu veterinário (para a tela de Emergência).',
+  ]],
+  ['Lembretes e alarmes', [
+    'Os avisos de vacina, remédio, passeio e comida são notificações do próprio celular. Eles são programados no aparelho e não passam por nenhum servidor.',
+    'Você pode desligar os avisos em Ajustes ou nas configurações do celular.',
+  ]],
+  ['Ranking de milhas', [
+    'Se você abrir o ranking, ele mostra para outras pessoas do app só o nome do pet, a raça e a cidade, com as milhas do mês.',
+    'Nunca aparece o seu nome, o seu e-mail nem a foto do pet. Ao excluir o pet ou a conta, ele sai do ranking.',
+  ]],
+  ['Assinatura (Primeira Classe)', [
+    'A Primeira Classe é paga pela loja do celular (App Store ou Google Play). Nós não vemos os dados do seu cartão.',
+    'O teste grátis dura 7 dias. Avisamos 2 dias antes de terminar. Se você não cancelar, a assinatura começa e renova sozinha a cada mês ou ano.',
+    'Para cancelar, vá em Assinaturas na loja do celular, a qualquer momento. Trocou de celular? Use "Restaurar compra".',
   ]],
   ['Inteligência artificial', [
     'Quando você usa a leitura da foto ou o Guia IA, a foto, o áudio ou a pergunta vão para a IA do Google (Gemini) — ou da OpenAI, se a do Google estiver fora do ar — só para gerar a resposta.',
@@ -42,7 +56,7 @@ export default function Termos() {
             ))}
           </View>
         ))}
-        <T style={{ fontSize: 15, color: C.inkSoft, textAlign: 'center' }}>Versão completa: pataporte-app.web.app/privacidade · Última atualização: setembro de 2026.</T>
+        <T style={{ fontSize: 15, color: C.inkSoft, textAlign: 'center' }}>Versão completa: pataporte-app.web.app/privacidade · Última atualização: outubro de 2026.</T>
       </View>
     </Page>
   );

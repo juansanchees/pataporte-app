@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cityKey", "order": "ASCENDING" },
+        { "fieldPath": "seasonMiles", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "breedKey", "order": "ASCENDING" },
+        { "fieldPath": "seasonMiles", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
