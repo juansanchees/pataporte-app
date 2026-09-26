@@ -61,13 +61,13 @@ export function tierLabel(tier: VaccineTier, species: Species): string {
 
 export const VACCINES: VaccineInfo[] = [
   {
-    id: 'V10', species: ['dog'], short: 'V10', name: 'V8 ou V10 (múltipla)', aka: '(Polivalente)', tier: 'essencial',
+    id: 'V10', species: ['dog'], short: 'V10', name: 'V10', tier: 'essencial',
     protects: 'Protege contra cinomose e parvovirose',
     edu: {
       title: 'O que é a V10?',
       subtitle: 'A vacina que protege contra as doenças mais perigosas',
       lines: ['Protege contra cinomose, parvovirose e mais 8 doenças', 'Essas doenças podem matar, principalmente filhotes', 'Filhote: 3 doses. Depois: 1 vez por ano'],
-      didYouKnow: 'Muita gente só dá a antirrábica. A V10 é tão importante quanto.',
+      didYouKnow: 'Muita gente só dá a antirrábica. A V10 (também chamada de polivalente) é tão importante quanto.',
     },
     adultSeriesDoses: 2, puppyDoses: 3, seriesIntervalDays: 21, boosterMonths: 12, minWeeks: 6,
   },

@@ -266,15 +266,18 @@ export interface DutyItem {
   category?: ShopCategory;
   /** v1.1: item de viagem — só libera depois de chegar nesse destino do mapa (milhas acumuladas) */
   destination?: DestinationId;
+  /** v1.0: item descontinuado — some da loja, mas continua existindo (desenho e ownership) para quem já tem */
+  hidden?: boolean;
 }
 
 export const DUTY_ITEMS: DutyItem[] = [
   { id: 'bandana', name: 'Bandana', price: 150, layers: ['pescoco'], acc: ['bandana'] },
   { id: 'oculos', name: 'Óculos de aviador', price: 200, layers: ['olhos'], acc: ['oculos'] },
   { id: 'gravata', name: 'Gravata-borboleta', price: 250, layers: ['pescoco'], acc: ['gravata'] },
-  { id: 'quepe', name: 'Quepe de piloto', price: 300, layers: ['cabeca'], acc: ['quepe'] },
+  // v1.0: descontinuados (regra antiga de nível). Ficam no catálogo só para quem já possui — ver `hidden`.
+  { id: 'quepe', name: 'Quepe de piloto', price: 300, layers: ['cabeca'], acc: ['quepe'], hidden: true },
   { id: 'coleira', name: 'Coleira dourada', price: 400, layers: ['pescoco'], acc: ['coleira'], firstClass: true },
-  { id: 'kit', name: 'Kit Embaixador', price: 1500, layers: ['cabeca', 'pescoco'], acc: ['quepe', 'gravata'], minLevel: 6 },
+  { id: 'kit', name: 'Kit Embaixador', price: 1500, layers: ['cabeca', 'pescoco'], acc: ['quepe', 'gravata'], minLevel: 6, hidden: true },
   // ---- v1.1: Loja do avatar
   { id: 'chapeu_viagem', name: 'Chapéu de viagem', price: 300, layers: ['cabeca'], acc: ['chapeu_viagem'], category: 'chapeus' },
   { id: 'bone', name: 'Boné', price: 150, layers: ['cabeca'], acc: ['bone'], category: 'chapeus' },

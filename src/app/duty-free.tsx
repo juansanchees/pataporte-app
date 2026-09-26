@@ -36,7 +36,7 @@ export default function LojaAvatar() {
   const sel = trying ? DUTY_ITEMS.find((i) => i.id === trying) ?? null : null;
   const st: ItemState | null = sel ? itemState(sel, pet, ledger, plan) : null;
   const preview = accessoriesFor(sel ? equip({ ...pet, owned: [...pet.owned, sel.id] }, sel.id) : pet.equipped);
-  const items = DUTY_ITEMS.filter((it) => inCategory(it, cat));
+  const items = DUTY_ITEMS.filter((it) => inCategory(it, cat) && !it.hidden);
   const cols = 3;
   const cardW = Math.floor((Math.min(width, 560) - 40 - (cols - 1) * 10) / cols);
   const cityOf = (it: DutyItem) => (it.destination ? destinationById(it.destination)?.name ?? '' : '');

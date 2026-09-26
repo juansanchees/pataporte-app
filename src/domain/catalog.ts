@@ -177,7 +177,7 @@ export interface CareType {
  * These are common recommendations in Brazil; the UI always tells the tutor to confirm with the vet.
  */
 export const CARE_TYPES: CareType[] = [
-  { code: 'V10', name: 'V8 ou V10 (múltipla)', category: 'vacina', species: ['dog'], recurrence: { unit: 'year', every: 1 }, hint: 'Reforço anual', optional: false, miles: 15, about: 'Protege contra cinomose, parvovirose, hepatite, leptospirose e outras doenças graves. Filhotes tomam 3 a 4 doses; adultos, 1 reforço por ano.' },
+  { code: 'V10', name: 'V10', category: 'vacina', species: ['dog'], recurrence: { unit: 'year', every: 1 }, hint: 'Reforço anual', optional: false, miles: 15, about: 'Protege contra cinomose, parvovirose, hepatite, leptospirose e outras doenças graves. Filhotes tomam 3 a 4 doses; adultos, 1 reforço por ano.' },
   { code: 'V4F', name: 'V4 ou V5 felina (múltipla)', category: 'vacina', species: ['cat'], recurrence: { unit: 'year', every: 1 }, hint: 'Reforço anual', optional: false, miles: 15, about: 'Protege gatos contra rinotraqueíte, calicivirose, panleucopenia (e clamidiose na V4/leucemia na V5). Reforço anual.' },
   { code: 'ARB', name: 'Antirrábica', category: 'vacina', species: ['dog', 'cat'], recurrence: { unit: 'year', every: 1 }, hint: 'Reforço anual · obrigatória', optional: false, miles: 15, about: 'Protege contra a raiva. É obrigatória por lei e exigida em qualquer viagem. Reforço anual.' },
   { code: 'GRP', name: 'Gripe canina', category: 'vacina', species: ['dog'], recurrence: { unit: 'year', every: 1 }, hint: 'Opcional · convívio com outros cães', optional: true, miles: 15, about: 'Protege contra a tosse dos canis. Indicada para quem vai a creche, hotel, banho e tosa ou convive com muitos cães.' },

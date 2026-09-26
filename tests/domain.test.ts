@@ -118,7 +118,7 @@ test('Duty Free: estados, troca de camada e recompensas de visto', () => {
   const p2 = { ...pet, owned: ['bandana', 'gravata'], equipped: ['bandana'] };
   assert.deepEqual(equip(p2, 'gravata'), ['gravata']); // mesma camada (pescoço) substitui
   assert.deepEqual(accessoriesFor(['kit']).sort(), ['gravata', 'quepe']);
-  assert.deepEqual(pendingRewards(pet, [L(T, 'cuidado', 950)]), ['bandana', 'gravata', 'oculos', 'quepe']);
+  assert.deepEqual(pendingRewards(pet, [L(T, 'cuidado', 950)]), ['bandana', 'gravata', 'oculos', 'chapeu_viagem']);
 });
 
 test('classes: limite de passaportes', () => {

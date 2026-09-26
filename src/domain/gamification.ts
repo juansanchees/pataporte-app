@@ -13,8 +13,8 @@ export const LEVELS: Level[] = [
   { n: 2, name: 'Turista', min: 150, reward: 'bandana', perk: 'Ganha a Bandana para o avatar.' },
   { n: 3, name: 'Mochileiro', min: 350, reward: 'gravata', perk: 'Ganha a Gravata-borboleta.' },
   { n: 4, name: 'Explorador', min: 600, reward: 'oculos', perk: 'Ganha os Óculos de aviador.' },
-  { n: 5, name: 'Globetrotter', min: 900, reward: 'quepe', perk: 'Ganha o Quepe de piloto.' },
-  { n: 6, name: 'Embaixador', min: 1500, reward: 'kit', perk: 'Ganha o Kit Embaixador (quepe + gravata) e o título máximo.' },
+  { n: 5, name: 'Globetrotter', min: 900, reward: 'chapeu_viagem', perk: 'Ganha o Chapéu de viagem para o avatar.' },
+  { n: 6, name: 'Embaixador', min: 1500, perk: 'Título máximo alcançado.' },
 ];
 
 /** Como ganhar milhas (texto para a tela de níveis). */
