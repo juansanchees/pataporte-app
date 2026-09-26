@@ -10,6 +10,7 @@ import { reminderTypeLabel } from '@/domain/today';
 import { fromDay, parseBR, toDay, today } from '@/domain/dates';
 import type { ReminderType } from '@/domain/types';
 import { track } from '@/services/analytics';
+import { art } from '@/domain/words';
 import { C } from '@/theme';
 
 const ICON: Partial<Record<ReminderType, LembreteIconName>> = { passeio: 'walk', banho: 'bath', consulta: 'stethoscope', comida: 'food', outro: 'dots' };
@@ -79,7 +80,7 @@ export default function LembreteSimples() {
           <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: C.aquaPale, alignItems: 'center', justifyContent: 'center' }}>
             <LembreteIcon name={ICON[type] ?? 'dots'} size={22} color={C.aquaInk} />
           </View>
-          <T v="serif" style={{ fontSize: 22, flex: 1 }}>{`${reminderTypeLabel(type)} de ${pet.name}`}</T>
+          <T v="serif" style={{ fontSize: 22, flex: 1 }}>{`${reminderTypeLabel(type)} ${art(pet).do} ${pet.name}`}</T>
         </View>
 
         {recurring ? (

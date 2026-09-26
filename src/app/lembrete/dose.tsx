@@ -8,6 +8,7 @@ import { LembreteIcon } from '@/art/icons-lembrete';
 import { dosesBetween, doseKey } from '@/domain/meds';
 import { atTime, hhmmOf, toDay } from '@/domain/dates';
 import { track } from '@/services/analytics';
+import { art } from '@/domain/words';
 import { C, F } from '@/theme';
 
 /** Dose-Atrasada: sheet para marcar uma dose de remédio como dada, esquecida ou pulada. */
@@ -43,7 +44,7 @@ export default function LembreteDose() {
         <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: C.amberPale, alignItems: 'center', justifyContent: 'center' }}>
           <LembreteIcon name="pill" size={26} color={C.amber} />
         </View>
-        <T v="serif" style={{ fontSize: 22, textAlign: 'center' }}>{`O ${pet.name} tomou o ${reminder.med.name}?`}</T>
+        <T v="serif" style={{ fontSize: 22, textAlign: 'center' }}>{`${art(pet).O} ${pet.name} tomou o ${reminder.med.name.toLowerCase()}?`}</T>
         <T v="label">{`PREVISTA · ${time}`}</T>
       </View>
 

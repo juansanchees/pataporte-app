@@ -35,9 +35,9 @@ export default function LembreteNovo() {
       <View style={{ alignItems: 'center', gap: 2, marginBottom: 4 }}>
         <View style={{ width: 44, height: 5, borderRadius: 3, backgroundColor: C.line, marginBottom: 10 }} />
         <T v="eyebrow">{pet.name.toUpperCase()}</T>
-        <T v="serif" style={{ fontSize: 26 }}>O que vamos lembrar?</T>
+        <T v="serif" accessibilityRole="header" style={{ fontSize: 26, color: C.cover }}>O que vamos lembrar?</T>
       </View>
-      <View style={{ gap: 10 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
         {REMINDER_TYPES.map((t) => (
           <TypeOption key={t.type} type={t.type} label={t.label} onPress={() => router.replace(ROUTE[t.type] as any)} />
         ))}

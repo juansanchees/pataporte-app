@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { T } from '@/components/ui';
 import { LembreteIcon, type LembreteIconName } from '@/art/icons-lembrete';
 import type { ReminderType } from '@/domain/types';
@@ -20,6 +21,8 @@ export function BottomCard({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={{ flex: 1, backgroundColor: 'rgba(11,35,40,0.55)', justifyContent: 'flex-end' }}>
+      {/* tocar no fundo escuro fecha (como os outros sheets) */}
+      <Pressable style={{ flex: 1 }} onPress={() => (router.canGoBack() ? router.back() : router.replace('/inicio'))} accessibilityRole="button" accessibilityLabel="Fechar" />
       <View style={{ backgroundColor: C.paper, borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 22, paddingBottom: 22 + insets.bottom, gap: 14, maxHeight: '92%' }}>
         {children}
       </View>
@@ -32,14 +35,13 @@ export function TypeOption({ type, label, onPress }: { type: ReminderType; label
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
       style={({ pressed }) => ({
-        flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 60, borderRadius: 14, paddingHorizontal: 16,
-        backgroundColor: C.sheet, borderWidth: 1.5, borderColor: C.line, opacity: pressed ? 0.75 : 1,
+        width: '48%', flexGrow: 1, alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 96, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 12,
+        backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: C.line, opacity: pressed ? 0.75 : 1,
       })}>
-      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.aquaPale, alignItems: 'center', justifyContent: 'center' }}>
-        <LembreteIcon name={TYPE_ICON[type]} size={20} color={C.aquaInk} />
+      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: C.aquaPale, alignItems: 'center', justifyContent: 'center' }}>
+        <LembreteIcon name={TYPE_ICON[type]} size={22} color={C.aquaInk} />
       </View>
-      <T v="xbold" style={{ fontSize: 17, flex: 1 }}>{label}</T>
-      <LembreteIcon name="dots" size={4} color={C.inkFaint} />
+      <T v="xbold" style={{ fontSize: 17, textAlign: 'center' }}>{label}</T>
     </Pressable>
   );
 }
