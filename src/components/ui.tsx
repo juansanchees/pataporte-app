@@ -37,6 +37,7 @@ export function Button({ label, onPress, variant = 'primary', icon, small, disab
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: !!disabled }}
+      disabled={!!disabled || !!loading}
       onPress={disabled || loading ? undefined : onPress}
       style={({ pressed }) => [
         styles.btn,

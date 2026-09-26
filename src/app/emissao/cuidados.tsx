@@ -126,7 +126,7 @@ export default function Cuidados() {
     const v = answered['c:refeicoes'];
     return (
       <ChapterFrame cap={5} onNext={next} disabled={!v}>
-        {head('clock', 'Quantas vezes por dia ele come?')}
+        {head('clock', `Quantas vezes por dia ${ref.o} come?`)}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }} accessibilityRole="radiogroup">
           {[1, 2, 3, 4].map((k) => {
             const on = v === String(k);

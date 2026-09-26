@@ -81,20 +81,23 @@ export function LastAnswerPicker({ scope, value, onChange, preview, pairLast }: 
             );
           })}
         </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-          {MONTHS.map((m, i) => {
-            const n = i + 1;
-            const future = year === thisYear && n > thisMonth;
-            const on = month === n;
-            return (
-              <Pressable key={m} disabled={future} accessibilityRole="radio" accessibilityState={{ selected: on, disabled: future }} accessibilityLabel={`${MONTH_NAMES[i]} de ${year}`} onPress={() => setMonth(n)}
-                style={{ width: '15.2%', flexGrow: 1, minHeight: 48, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
-                  borderWidth: on ? 0 : 1.5, borderColor: future ? '#E4D9BE' : C.line, backgroundColor: on ? C.cover : future ? '#EFE7D4' : '#FFFFFF' }}>
-                <T style={{ fontFamily: F.monoBold, fontSize: 14, color: on ? '#FFFFFF' : future ? C.inkFaint : C.ink }}>{m}</T>
-              </Pressable>
-            );
-          })}
-        </View>
+        {[0, 6].map((row) => (
+          <View key={row} style={{ flexDirection: 'row', gap: 6 }}>
+            {MONTHS.slice(row, row + 6).map((m, k) => {
+              const i = row + k;
+              const n = i + 1;
+              const future = year === thisYear && n > thisMonth;
+              const on = month === n;
+              return (
+                <Pressable key={m} disabled={future} accessibilityRole="radio" accessibilityState={{ selected: on, disabled: future }} accessibilityLabel={`${MONTH_NAMES[i]} de ${year}`} onPress={() => setMonth(n)}
+                  style={{ flex: 1, minWidth: 0, minHeight: 48, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
+                    borderWidth: on ? 0 : 1.5, borderColor: future ? '#E4D9BE' : C.line, backgroundColor: on ? C.cover : future ? '#EFE7D4' : '#FFFFFF' }}>
+                  <T style={{ fontFamily: F.monoBold, fontSize: 14, color: on ? '#FFFFFF' : future ? C.inkFaint : C.ink }}>{m}</T>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
         {month ? <T v="xbold" style={{ fontSize: 16, lineHeight: 20, color: C.cover, textAlign: 'center' }}>{`Vamos considerar meados de ${MONTH_NAMES[month - 1]}.`}</T> : null}
         {pv}
       </RadioOption>

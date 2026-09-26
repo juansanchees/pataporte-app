@@ -8,7 +8,7 @@ import { useApp } from '@/store/app';
 import { C, F } from '@/theme';
 
 export const CHAPTERS = [
-  { n: 1, name: 'Quem é você', short: 'QUEM É VOCÊ', sub: 'foto, nome, nascimento' },
+  { n: 1, name: 'Quem é você?', short: 'QUEM É VOCÊ', sub: 'foto, nome, nascimento' },
   { n: 2, name: 'Personalidade', short: 'PERSONALIDADE', sub: '1 min' },
   { n: 3, name: 'Vacinas', short: 'VACINAS', sub: '1 min' },
   { n: 4, name: 'Vermífugo e antipulgas', short: 'VERMÍFUGO E ANTIPULGAS', sub: '1 min' },
@@ -31,7 +31,7 @@ export function ChapterProgress({ cap, done = false, label }: { cap: number; don
           );
         })}
       </View>
-      <T v="eyebrow" style={{ fontSize: 12, color: C.inkSoft, letterSpacing: 1.3 }} numberOfLines={1}>{label ?? `CAPÍTULO ${cap} DE 5 · ${done ? 'CONCLUÍDO' : name}`}</T>
+      <T v="eyebrow" style={{ fontSize: 12, color: C.inkSoft, letterSpacing: 1.3 }} numberOfLines={2}>{label ?? `CAPÍTULO ${cap} DE 5 · ${done ? 'CONCLUÍDO' : name}`}</T>
     </View>
   );
 }
@@ -52,7 +52,7 @@ export function BigButton({ label, onPress, disabled, loading, variant = 'primar
 }) {
   const primary = variant === 'primary';
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled || !!loading }} onPress={disabled || loading ? undefined : onPress}
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled || !!loading }} disabled={!!disabled || !!loading} onPress={disabled || loading ? undefined : onPress}
       style={({ pressed }) => [{
         minHeight: primary ? 60 : 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10, paddingHorizontal: 18,
         backgroundColor: primary ? (disabled ? C.paper3 : C.cover) : 'transparent', borderWidth: primary ? 0 : 2, borderColor: C.cover,
