@@ -39,3 +39,15 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# chaves do Firebase
+.env
+
+# segredos e builds locais (Pataporte)
+.env
+.env.*
+!.env.example
+functions/lib/
+functions/.secret.local
+functions/.env.local
+functions/src/shared/

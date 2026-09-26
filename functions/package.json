@@ -1,0 +1,20 @@
+{
+  "name": "pataporte-functions",
+  "private": true,
+  "main": "lib/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "prebuild": "node -e \"require('fs').mkdirSync('src/shared',{recursive:true});require('fs').copyFileSync('../src/shared/aiPrompts.ts','src/shared/aiPrompts.ts')\"",
+    "build": "tsc",
+    "test": "npm run build && node --test lib/test.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.5.0",
+    "firebase-functions": "^7.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}
