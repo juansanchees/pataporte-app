@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Pet, UserProfile } from '@/domain/types';
+import { PET_COLLECTIONS, type Pet, type UserProfile } from '@/domain/types';
 import type { AuthUser, Backend, Collection } from './backend';
 
 /**
@@ -103,7 +103,7 @@ export function createLocalBackend(): Backend {
         const pets = await read<Pet[]>(K.pets, []);
         await write(K.pets, pets.filter((p) => p.id !== petId));
       });
-      const colls: Collection[] = ['cares', 'stamps', 'ledger', 'weights', 'diary', 'chat', 'trips'];
+      const colls: Collection[] = [...PET_COLLECTIONS];
       await AsyncStorage.multiRemove(colls.map((c) => K.coll(petId, c)));
     },
     async list(petId, coll) {

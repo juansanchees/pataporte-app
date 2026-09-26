@@ -32,7 +32,7 @@ export const ROUTINE_ICON: Record<RoutineKind, 'bowl' | 'drop' | 'map' | 'star' 
 export function routineItems(pet: Pet, ledger: LedgerEntry[], today: string): RoutineItem[] {
   const r = routineOf(pet);
   const todays = ledger.filter((e) => e.day === today && e.miles >= 0);
-  const done = (key: string) => todays.some((e) => (e.origin === 'rotina' || e.origin === 'racao') && (e.ref === key || (e.origin === 'racao' && `racao-${e.ref}` === key)));
+  const done = (key: string) => todays.some((e) => (e.origin === 'rotina' || e.origin === 'passeio' || e.origin === 'racao') && (e.ref === key || (e.origin === 'racao' && `racao-${e.ref}` === key)));
   const g = gramsPerMeal(pet);
   const items: RoutineItem[] = [];
   pet.mealTimes.forEach((t, i) => items.push({

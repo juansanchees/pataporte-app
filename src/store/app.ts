@@ -5,15 +5,20 @@ import { Platform } from 'react-native';
 import { backend, newId, type AuthUser, type Collection } from '@/data';
 import { careTypesFor, emissionCareTypes, foodLabel, milesForCategory, codeFromName, mealTimesFor } from '@/domain/catalog';
 import { generateItinerary, historyOf, makeCareStamp, stampCare, rotationFor, type HistoryWhen } from '@/domain/itinerary';
-import { earned, levelFor, milesTotals, MILES } from '@/domain/gamification';
-import { equip, itemById, itemState, pendingRewards, unequip, LIMITS } from '@/domain/commerce';
+import { canRedeemMonth, destinationById, earned, levelFor, mapProgress, milesSummary, milesTotals, MILES, REDEEM_COST, REDEEM_MONTHS, streakBonusDue, type DestinationId, type MapProgress, type MilesReason, type MilesSummary, type RedeemCheck } from '@/domain/gamification';
+import { effectivePlan, equip, itemById, itemState, limitsFor, paywallTrigger, pendingRewards, unequip, PRICES, type PaywallEvent, type PlanLimits } from '@/domain/commerce';
+import { applyVaccineAnswer, planSeries, vaccineById, vaccinePlan, nextDoseFromAnswer, type NextDose, type PlanOptions, type VaccineId, type VaccinePlan } from '@/domain/vaccines';
+import { durationMonths, nextFromDuration, PARASITE_CODE, type ParasiteKind, type ParasiteNext } from '@/domain/parasites';
+import { doseKey, onTime, scheduleTimes, shiftMinutes, statusForGiven, suggestShift } from '@/domain/meds';
+import { type TodayItem } from '@/domain/today';
+import { migratePetData, migrateProfile } from '@/domain/migrate';
 import { answerGuide } from '@/domain/guide';
 import { aiEnabled, aiErrorText, askGuideAI, imageForAi, readBase64 } from '@/services/ai';
 import { newPassportNumber } from '@/domain/mrz';
-import { addDays, addRecurrence, ageYears, diffDays, localMonth, parseBR, today } from '@/domain/dates';
+import { addDays, addRecurrence, ageYears, atTime, diffDays, hhmmToMin, localMonth, minToHHMM, parseBR, today } from '@/domain/dates';
 import { breedContext } from '@/domain/breeds';
-import { EMPTY_PET_DATA, type Care, type CareCategory, type ChatMsg, type DiaryEntry, type DiaryKind, type HistoryAnswer, type Trip, type LedgerEntry, type LedgerOrigin, type Pet, type PetData, type PetDetails, type Plan, type Recurrence, type Species, type Stamp, type TriState, type UserProfile } from '@/domain/types';
-import { rescheduleAll } from '@/services/notifications';
+import { EMPTY_PET_DATA, PET_COLLECTIONS, type Care, type CareCategory, type ChatMsg, type DiaryEntry, type DiaryKind, type DoseLog, type HistoryAnswer, type LastAnswer, type ParasiteDuration, type PaywallTriggerId, type Reminder, type ReminderRepeat, type ReminderType, type MedSchedule, type Trip, type LedgerEntry, type LedgerOrigin, type Pet, type PetData, type PetDetails, type Plan, type Recurrence, type Species, type Stamp, type TriState, type UserProfile, type VaccineAnswer } from '@/domain/types';
+import { registerNotificationHandler, rescheduleAll, snoozeDose, type NotificationActionEvent } from '@/services/notifications';
 import { backupPhoto, hasCloud, splitPhoto } from '@/services/photos';
 import { appleSignIn, googleSignIn, socialSignOut } from '@/services/socialAuth';
 import { dayRecap, routineItems, routineProgress, type RoutineItem } from '@/domain/routine';
@@ -51,6 +56,23 @@ export interface Draft {
   temperament: string[];
   answers: Record<string, HistoryAnswer | undefined>;
   whens: Record<string, HistoryWhen | undefined>;
+  /** v1.1 cadastro · capítulo 3: resposta de cada vacina ('V10', 'ARB', …) */
+  vaccineAnswers?: Partial<Record<string, VaccineAnswer>>;
+  /** v1.1 cadastro · capítulo 4: vermífugo e antipulgas (separados) */
+  parasites?: Partial<Record<ParasiteKind, { last: LastAnswer; duration: ParasiteDuration }>>;
+}
+
+/** Entrada de "+ Lembrete". Remédio: passe `med` (title vira o nome do remédio se vazio). */
+export interface NewReminder {
+  type: ReminderType;
+  title?: string;
+  note?: string;
+  /** YYYY-MM-DD (padrão hoje) */
+  date?: string;
+  time?: string | null;
+  repeat?: ReminderRepeat;
+  med?: Omit<MedSchedule, 'startDate'> & { startDate?: string };
+  notify?: boolean;
 }
 
 export const EMPTY_DRAFT: Draft = {
@@ -80,6 +102,8 @@ export const EMPTY_DRAFT: Draft = {
   temperament: [],
   answers: {},
   whens: {},
+  vaccineAnswers: {},
+  parasites: {},
 };
 
 export interface StampFx { top: string; bottom: string; main: string; sub: string; color: string; miles: number; next?: string | null }
@@ -134,13 +158,12 @@ interface State {
   saveTrip(t: Trip): Promise<void>;
   deleteTrip(id: string): Promise<void>;
   toggleTripItem(tripId: string, key: string): Promise<void>;
-  addReminder(name: string, day: string): Promise<void>;
   addCare(input: { name: string; category: CareCategory; applied: string | null; next: string | null; recurrence: Recurrence; reminders: number[]; place: string }): Promise<void>;
   deleteCare(careId: string): Promise<void>;
   addWeight(kg: number): Promise<void>;
   addDiary(e: { uri: string; note: string; kind: DiaryKind; tags: string[]; mood?: DiaryEntry['mood']; day?: string }): Promise<void>;
   deleteDiary(id: string): Promise<void>;
-  ask(text: string, photoUri?: string, audio?: { uri: string; mime: string }): Promise<{ status: 'ok' | 'limit' | 'noai' | 'error'; why?: string }>;
+  ask(text: string, photoUri?: string, audio?: { uri: string; mime: string }): Promise<{ status: 'ok' | 'limit' | 'noai' | 'error'; why?: string; paywall?: PaywallTriggerId }>;
   checkinRacao(time: string): Promise<void>;
   buy(itemId: string): Promise<'ok' | 'no'>;
   toggleEquip(itemId: string): Promise<void>;
@@ -151,6 +174,61 @@ interface State {
 
   showToast(msg: string): void;
   clearStampFx(): void;
+
+  // ================================================================ v1.1
+  /** paywall pedido por uma ação da store (ex.: 1ª vacina registrada). A UI mostra e chama markPaywallSeen. */
+  pendingPaywall: PaywallTriggerId | null;
+  /** classe que vale agora (teste grátis / mês trocado por milhas contam como Primeira Classe) */
+  plan(): Plan;
+  limits(): PlanLimits;
+  /** Deve abrir paywall para este evento? (não marca como visto) */
+  paywallFor(event: PaywallEvent): PaywallTriggerId | null;
+  markPaywallSeen(trigger: PaywallTriggerId): Promise<void>;
+  /** Teste grátis de 7 dias (simulado enquanto não há SDK de compras). */
+  startTrial(period?: 'mensal' | 'anual'): Promise<void>;
+  /** Pode adicionar pet? Se não, qual paywall. */
+  canAddPetNow(): { ok: boolean; paywall: PaywallTriggerId | null };
+  /** Conta 1 leitura de carteirinha por foto (limite mensal da classe). */
+  consumeCardScan(): Promise<'ok' | 'limit'>;
+  setCity(city: string): Promise<void>;
+
+  setDraftVaccine(id: string, answer: VaccineAnswer): NextDose;
+  setDraftParasite(kind: ParasiteKind, last: LastAnswer, duration: ParasiteDuration): ParasiteNext;
+  /** Plano de vacinas do pet ativo (ou do rascunho, durante o cadastro). */
+  vaccinePlanNow(opts?: PlanOptions): VaccinePlan | null;
+  /** Pet já cadastrado: registra/atualiza a resposta da vacina (cria o cuidado se faltar). */
+  registerVaccineAnswer(id: VaccineId, answer: VaccineAnswer): Promise<{ next: NextDose; paywall: PaywallTriggerId | null } | null>;
+  /** "Colocar tudo na agenda": grava as doses sugeridas do plano nos cuidados de vacina. */
+  applyVaccinePlan(opts?: PlanOptions): Promise<void>;
+  /** Vermífugo/antipulgas: última vez (data ou resposta) + duração → próxima data. */
+  setParasiteLast(kind: ParasiteKind, last: string | LastAnswer, duration: ParasiteDuration): Promise<ParasiteNext | null>;
+
+  addReminder(input: NewReminder): Promise<Reminder | null>;
+  updateReminder(id: string, patch: Partial<Omit<Reminder, 'id' | 'createdAt'>>): Promise<void>;
+  deleteReminder(id: string): Promise<void>;
+  /** v1.0: lembrete de data vira um cuidado "outro" no itinerário (usado pela checklist de viagem). */
+  addDateReminder(name: string, day: string): Promise<void>;
+  /** Marca dose: 'given' (at = quando deu; atraso > 60 min grava 'late') ou 'skipped'. */
+  markDose(reminderId: string, day: string, time: string, status: 'given' | 'skipped', at?: Date | string): Promise<DoseLog | null>;
+  unmarkDose(reminderId: string, day: string, time: string): Promise<void>;
+  /** Aplica a sugestão de horários fora da madrugada (muda med.firstDose). false = não precisa/impossível. */
+  applyNightShift(reminderId: string): Promise<boolean>;
+  /** Marca um item da lista "Hoje" (rotina, dose ou lembrete). */
+  markTodayItem(item: TodayItem, opts?: { at?: Date | string; minutes?: string }): Promise<void>;
+  unmarkTodayItem(item: TodayItem): Promise<void>;
+
+  /** Ganha milhas pela tabela v1.1 (dobro na Primeira Classe). Com `ref`, não repete. Retorna o ganho (0 = repetido). */
+  earnMiles(reason: MilesReason, ref?: string): Promise<number>;
+  milesNow(): MilesSummary;
+  mapNow(): MapProgress & { at: DestinationId };
+  /** Viaja no mapa (não gasta milhas). 1ª chegada ganha o carimbo do destino. */
+  travelTo(dest: DestinationId): Promise<'ok' | 'bloqueado'>;
+  buyShopItem(itemId: string): Promise<'ok' | 'no'>;
+  /** Troca 2.000 milhas por 1 mês de Primeira Classe (1 vez a cada 12 meses). */
+  redeemMonth(): Promise<RedeemCheck>;
+
+  /** Trata botões das notificações. A store já trata 'dei' e 'adiar15'; devolve `route` sugerida para a UI. */
+  handleNotificationAction(e: NotificationActionEvent): Promise<{ route?: string; petId?: string }>;
 }
 
 const b = () => backend();
@@ -169,9 +247,9 @@ function haptic(kind: 'success' | 'light' = 'light') {
 }
 
 async function loadPetData(petId: string): Promise<PetData> {
-  const colls: Collection[] = ['cares', 'stamps', 'ledger', 'weights', 'diary', 'chat', 'trips'];
+  const colls: Collection[] = [...PET_COLLECTIONS];
   const lists = await Promise.all(colls.map((c) => b().list(petId, c)));
-  const d = Object.fromEntries(colls.map((c, i) => [c, lists[i]])) as unknown as PetData;
+  const d = migratePetData(Object.fromEntries(colls.map((c, i) => [c, lists[i]])) as unknown as Partial<PetData>);
   d.chat.sort((a, x) => a.at.localeCompare(x.at));
   d.ledger.sort((a, x) => a.at.localeCompare(x.at));
   return d;
@@ -180,7 +258,7 @@ async function loadPetData(petId: string): Promise<PetData> {
 export const useApp = create<State>((set, get) => {
   // ---------------------------------------------------------------- helpers
   const pet = () => get().pets.find((p) => p.id === get().activePetId) ?? null;
-  const plan = (): Plan => get().profile?.plan ?? 'economica';
+  const plan = (): Plan => effectivePlan(get().profile);
 
   /**
    * Grava no banco sem travar a tela: sem internet o Firebase guarda na fila e só confirma depois,
@@ -217,7 +295,55 @@ export const useApp = create<State>((set, get) => {
     const after = levelFor(milesTotals(get().data.ledger).total);
     if (after.n > before.n) setTimeout(() => get().showToast(`Subiu de nível! ${get().pets.find((x) => x.id === get().activePetId)?.name ?? 'Seu pet'} agora é ${after.name}.`), 1600);
     await claimRewards();
+    // v1.1: +50 a cada 7 dias seguidos com cuidado
+    if (origin !== 'sequencia' && miles >= 0 && streakBonusDue(get().data.ledger, today())) {
+      const bonus = await earn('sequencia', MILES.sequencia);
+      setTimeout(() => get().showToast(`7 dias seguidos! +${bonus} milhas`), 2200);
+    }
     return miles;
+  }
+
+  async function saveProfile(p: UserProfile) {
+    set({ profile: p });
+    try { await withTimeout(b().saveProfile(p), 6000); } catch (e) { if (!(e instanceof Error && e.message === 'timeout')) get().showToast('Não foi possível salvar. Verifique a internet.'); }
+  }
+
+  /** Grava um cuidado (Care) do pet ativo. */
+  async function saveCare(c: Care) {
+    upsertLocal('cares', c);
+    await persist('cares', c);
+  }
+
+  /** Cuidado do catálogo (cria se o pet ainda não tem). */
+  function careFor(code: string): Care | null {
+    const p = pet();
+    if (!p) return null;
+    const found = get().data.cares.find((c) => c.code === code);
+    if (found) return found;
+    const t = careTypesFor(p.species, p.neutered).find((x) => x.code === code);
+    if (!t) return null;
+    return { id: newId(), code: t.code, name: t.name, category: t.category, recurrence: t.recurrence, lastDate: null, nextDate: null, origin: 'manual', answer: null, place: '', reminders: t.category === 'vacina' ? [7, 1, 0] : [3, 0], miles: t.miles, active: true, createdAt: new Date().toISOString() };
+  }
+
+  function vaccineAnswersOf(cares: Care[]): Partial<Record<string, VaccineAnswer>> {
+    const out: Partial<Record<string, VaccineAnswer>> = {};
+    for (const c of cares) if (c.category === 'vacina' && c.vaccineAnswer) out[c.code] = c.vaccineAnswer;
+    return out;
+  }
+
+  /** Cuidado de vermífugo/antipulgas a partir da última vez e da duração. */
+  function parasiteCare(c: Care, last: string | LastAnswer, duration: ParasiteDuration, t: string): { care: Care; next: ParasiteNext; stampDay: string | null } {
+    const next = nextFromDuration(last, duration, t);
+    const months = durationMonths(duration);
+    const realDay = typeof last === 'string' ? last : last.kind === 'data' ? last.date : last.kind === 'mes' ? next.last ?? null : null;
+    const history = realDay ? Array.from(new Set([...(c.history ?? (c.lastDate ? [c.lastDate] : [])), realDay])).sort() : c.history ?? [];
+    const { lastApprox: _a, ...rest } = c;
+    const care: Care = {
+      ...rest, durationMonths: months, recurrence: { unit: 'month', every: months }, history, lastDate: history[history.length - 1] ?? null,
+      nextDate: next.next, active: true, ...(typeof last === 'string' ? {} : { lastAnswer: last }), ...(next.approx ? { lastApprox: true } : {}),
+      answer: typeof last === 'string' ? 'tomei' : last.kind === 'nunca' ? 'nao' : last.kind === 'naosei' ? 'naosei' : 'tomei',
+    };
+    return { care, next, stampDay: realDay && !(c.history ?? []).includes(realDay) ? realDay : null };
   }
 
   async function claimRewards() {
@@ -294,11 +420,15 @@ export const useApp = create<State>((set, get) => {
       pendingResched = false;
       const { pets, activePetId, data, notificationsOn, profile } = get();
       // todos os pets: o aberto usa os dados da tela; os outros são lidos do banco
-      const list = await Promise.all(pets.map(async (p) => ({
-        pet: p,
-        cares: p.id === activePetId ? data.cares : await withTimeout(b().list<Care>(p.id, 'cares'), 8000).catch(() => [] as Care[]),
-      })));
-      await rescheduleAll(list, profile?.notifyHour ?? 9, notificationsOn).catch(() => {});
+      const list = await Promise.all(pets.map(async (p) => p.id === activePetId
+        ? { pet: p, cares: data.cares, reminders: data.reminders, doses: data.doses }
+        : {
+          pet: p,
+          cares: await withTimeout(b().list<Care>(p.id, 'cares'), 8000).catch(() => [] as Care[]),
+          reminders: await withTimeout(b().list<Reminder>(p.id, 'reminders'), 8000).catch(() => [] as Reminder[]),
+          doses: await withTimeout(b().list<DoseLog>(p.id, 'doses'), 8000).catch(() => [] as DoseLog[]),
+        }));
+      await rescheduleAll(list, profile?.notifyHour ?? 9, notificationsOn, { plan: effectivePlan(profile) }).catch(() => {});
     });
   }
 
@@ -309,6 +439,7 @@ export const useApp = create<State>((set, get) => {
     }
     try {
       let profile = await b().getProfile(u.uid);
+      if (profile) profile = migrateProfile(profile);
       if (!profile) {
         profile = { uid: u.uid, name: signupName || u.name || u.email.split('@')[0], email: u.email, plan: 'economica', createdAt: new Date().toISOString(), notifyHour: 9 };
         await b().saveProfile(profile);
@@ -351,6 +482,10 @@ export const useApp = create<State>((set, get) => {
       Promise.all([AsyncStorage.getItem('pp:onboarding'), AsyncStorage.getItem('pp:notifications')]).then(([o, n]) => {
         set({ onboardingSeen: o === '1', notificationsOn: n !== '0' });
         b().onAuth((u) => { afterAuth(u); });
+        // botões "Dei" / "Adiar 15 min" das notificações de remédio
+        registerNotificationHandler((e) => {
+          if (e.action === 'dei' || e.action === 'adiar15') return get().handleNotificationAction(e).then(() => undefined);
+        });
       });
     },
     async seeOnboarding() {
@@ -406,7 +541,7 @@ export const useApp = create<State>((set, get) => {
       set((s) => ({ draft: { ...s.draft, ...patch } }));
     },
     startNewPassport() {
-      set({ draft: { ...EMPTY_DRAFT, details: { ...EMPTY_DRAFT.details }, answers: {}, whens: {} } });
+      set({ draft: { ...EMPTY_DRAFT, details: { ...EMPTY_DRAFT.details }, answers: {}, whens: {}, vaccineAnswers: {}, parasites: {} } });
     },
     startEdit(p) {
       const [y, m, d] = p.birthDate.split('-');
@@ -442,7 +577,35 @@ export const useApp = create<State>((set, get) => {
         owned: [], equipped: [], createdAt: now,
       };
       const types = emissionCareTypes(pet.species, pet.neutered);
-      const { cares, stampsFor } = generateItinerary(types, draft.answers, t, newId, draft.whens);
+      const gen = generateItinerary(types, draft.answers, t, newId, draft.whens);
+      let cares = gen.cares;
+      const stampsFor = [...gen.stampsFor];
+      // v1.1: respostas novas do cadastro (vacinas com plano + vermífugo/antipulgas com duração)
+      const vAns = draft.vaccineAnswers ?? {};
+      if (Object.keys(vAns).length) {
+        const series = planSeries(vaccinePlan(pet, vAns, t));
+        cares = cares.map((c) => {
+          const a = vAns[c.code];
+          if (!a || c.category !== 'vacina') return c;
+          const updated = applyVaccineAnswer({ ...c, reminders: [7, 1, 0] }, a, pet, t, series[c.code]);
+          const i = stampsFor.findIndex((x) => x.id === c.id);
+          if (i >= 0) stampsFor.splice(i, 1);
+          if ((a.kind === 'data' || a.kind === 'mes') && updated.lastDate) stampsFor.push(updated);
+          return updated;
+        });
+      }
+      for (const kind of ['vermifugo', 'antipulgas'] as ParasiteKind[]) {
+        const ans = draft.parasites?.[kind];
+        if (!ans) continue;
+        cares = cares.map((c) => {
+          if (c.code !== PARASITE_CODE[kind]) return c;
+          const r = parasiteCare(c, ans.last, ans.duration, t);
+          const i = stampsFor.findIndex((x) => x.id === c.id);
+          if (i >= 0) stampsFor.splice(i, 1);
+          if (r.care.lastDate) stampsFor.push(r.care);
+          return r.care;
+        });
+      }
       const stamps: Stamp[] = [
         { id: newId(), kind: 'emissao', code: 'EMI', top: 'PATAPORTE EMITIDO', bottom: 'BEM-VINDO A BORDO', main: 'EMITIDO', sub: t, color: '#B03F29', shape: 'circle', rotation: -14, date: t },
         ...stampsFor.map((c) => makeCareStamp(c, c.lastDate ?? t, pet.name, newId(), 'JÁ APLICADO')),
@@ -504,9 +667,14 @@ export const useApp = create<State>((set, get) => {
       upsertLocal('cares', updated);
       upsertLocal('stamps', st);
       await Promise.all([persist('cares', updated), persist('stamps', st)]);
-      const miles = await earn('cuidado', care.miles, `${care.id}:${t}`);
+      // v1.1: vacina em dia vale +100
+      const miles = care.category === 'vacina' ? await earn('vacina', MILES.vacina, `${care.id}:${t}`) : await earn('cuidado', care.miles, `${care.id}:${t}`);
       haptic();
       set({ stampAsk: null, stampFx: { top: st.top, bottom: st.bottom, main: st.main, sub: st.sub, color: st.color, miles, next: updated.nextDate } });
+      if (care.category === 'vacina') {
+        const pw = get().paywallFor('primeira_vacina');
+        if (pw) set({ pendingPaywall: pw });
+      }
       reschedule();
     },
 
@@ -570,9 +738,10 @@ export const useApp = create<State>((set, get) => {
       await persist('diary', e);
       const pidD = get().activePetId;
       if (uri && pidD) cloudItemPhoto('diary', pidD, e);
-      const todays = get().data.ledger.filter((x) => x.origin === 'foto' && x.day === today()).length;
-      if (todays < 3) {
-        const m = await earn('foto', MILES.foto);
+      // v1.1: foto do dia vale +5 (1 vez por dia); registro sem foto não dá milhas
+      const photoToday = get().data.ledger.some((x) => x.origin === 'foto_dia' && x.day === today());
+      if (uri && !photoToday) {
+        const m = await earn('foto_dia', MILES.foto_dia);
         get().showToast(`Registrado no diário de vida · +${m} milhas`);
       } else get().showToast('Registrado no diário de vida.');
     },
@@ -590,7 +759,15 @@ export const useApp = create<State>((set, get) => {
       const pid = p.id;
       const month = localMonth();
       const used = get().data.chat.filter((m) => m.from === 'user' && localMonth(m.at) === month).length;
-      if (used >= LIMITS[plan()].guideMonthly) return { status: 'limit' };
+      const lim = limitsFor(plan());
+      if (used >= lim.guideMonthly) {
+        const pw = paywallTrigger('ia_4a_pergunta', { plan: plan(), guideUsedThisMonth: used, seen: get().profile?.paywallSeen });
+        return { status: 'limit', ...(pw ? { paywall: pw } : {}) };
+      }
+      if ((photoUri || audio) && lim.guideTextOnly) {
+        const pw = paywallTrigger('ia_foto', { plan: plan() });
+        return { status: 'limit', ...(pw ? { paywall: pw } : {}) };
+      }
       if (!aiEnabled()) {
         if (audio) return { status: 'noai' };
         const q: ChatMsg = { id: newId(), at: new Date().toISOString(), from: 'user', text: text.trim(), photoUri };
@@ -660,9 +837,12 @@ export const useApp = create<State>((set, get) => {
     async setPlan(newPlan) {
       const pr = get().profile;
       if (!pr) return;
-      const updated = { ...pr, plan: newPlan };
+      // simulado (sem SDK de compras): troca a classe base; teste/milhas continuam em planState
+      const st = pr.planState;
+      const updated: UserProfile = { ...pr, plan: newPlan, planState: { ...(st ?? {}), plan: newPlan === 'economica' ? 'economica' : 'primeira', source: newPlan === 'economica' ? 'gratis' : 'simulado' } };
       set({ profile: updated });
       try { await b().saveProfile(updated); } catch { get().showToast('Não foi possível salvar. Verifique a internet.'); }
+      reschedule();
     },
 
     async setNotifications(on, hour) {
@@ -713,7 +893,8 @@ export const useApp = create<State>((set, get) => {
       if (item.kind === 'racao' && item.time) {
         await get().checkinRacao(item.time);
       } else {
-        const m = await earn('rotina', MILES.rotina, item.key);
+        // v1.1: passeio vale +10
+        const m = item.kind === 'passeio' ? await earn('passeio', MILES.passeio, item.key) : await earn('rotina', MILES.rotina, item.key);
         haptic('success');
         get().showToast(`${item.title} · +${m} milhas`);
       }
@@ -739,7 +920,7 @@ export const useApp = create<State>((set, get) => {
       if (!p) return;
       const t = today();
       const mealRef = key.startsWith('racao-') ? key.slice(6) : null;
-      const gone = get().data.ledger.filter((e) => e.day === t && (e.origin === 'dia_completo' || (e.origin === 'rotina' && e.ref === key) || (mealRef && e.origin === 'racao' && e.ref === mealRef)));
+      const gone = get().data.ledger.filter((e) => e.day === t && (e.origin === 'dia_completo' || ((e.origin === 'rotina' || e.origin === 'passeio') && e.ref === key) || (mealRef && e.origin === 'racao' && e.ref === mealRef)));
       if (!gone.length) return;
       const diaryGone = [`rot-${t}-${key}`, `rot-${t}-dia`];
       set((s) => ({ data: { ...s.data, ledger: s.data.ledger.filter((e) => !gone.includes(e)), diary: s.data.diary.filter((d) => !diaryGone.includes(d.id)) } }));
@@ -846,10 +1027,324 @@ export const useApp = create<State>((set, get) => {
       if (!tr.done.includes(key)) haptic('success');
     },
 
-    async addReminder(name, day) {
+    async addDateReminder(name, day) {
       const exists = get().data.cares.some((c) => c.name === name && c.active);
       if (exists) { get().showToast('Esse lembrete já está no itinerário.'); return; }
       await get().addCare({ name, category: 'outro', applied: null, next: day < today() ? today() : day, recurrence: null, reminders: [7, 1, 0], place: '' });
+    },
+
+    // ================================================================ v1.1
+    pendingPaywall: null,
+
+    plan() {
+      return plan();
+    },
+    limits() {
+      return limitsFor(plan());
+    },
+    paywallFor(event) {
+      const { profile, pets, data } = get();
+      const month = localMonth();
+      return paywallTrigger(event, {
+        plan: plan(),
+        seen: profile?.paywallSeen,
+        petCount: pets.length,
+        guideUsedThisMonth: data.chat.filter((m) => m.from === 'user' && localMonth(m.at) === month).length,
+        vaccinesRegistered: data.cares.filter((c) => c.category === 'vacina' && (c.lastDate || c.vaccineAnswer)).length,
+      });
+    },
+    async markPaywallSeen(trigger) {
+      const pr = get().profile;
+      if (get().pendingPaywall === trigger) set({ pendingPaywall: null });
+      if (!pr) return;
+      await saveProfile({ ...pr, paywallSeen: { ...(pr.paywallSeen ?? {}), [trigger]: new Date().toISOString() } });
+    },
+    async startTrial(period = 'anual') {
+      const pr = get().profile;
+      if (!pr) return;
+      if (pr.planState?.trialEndsAt) { get().showToast('O teste grátis já foi usado nesta conta.'); return; }
+      const end = new Date(Date.now() + PRICES.trialDays * 86400000).toISOString();
+      await saveProfile({ ...pr, planState: { ...(pr.planState ?? {}), plan: pr.planState?.plan ?? 'economica', trialEndsAt: end, source: 'trial', period } });
+      reschedule();
+    },
+    canAddPetNow() {
+      const ok = get().pets.length < limitsFor(plan()).maxPets;
+      return { ok, paywall: ok ? null : get().paywallFor('segundo_pet') };
+    },
+    async consumeCardScan() {
+      const pr = get().profile;
+      if (!pr) return 'limit';
+      const month = localMonth();
+      const cur = pr.cardScans?.month === month ? pr.cardScans.count : 0;
+      if (cur >= limitsFor(plan()).cardScanMonthly) return 'limit';
+      await saveProfile({ ...pr, cardScans: { month, count: cur + 1 } });
+      return 'ok';
+    },
+    async setCity(city) {
+      const pr = get().profile;
+      if (!pr) return;
+      await saveProfile({ ...pr, city: city.trim() });
+    },
+
+    // ---------------------------------------------------------------- cadastro: vacinas e parasitas
+    setDraftVaccine(id, answer) {
+      const d = get().draft;
+      set({ draft: { ...d, vaccineAnswers: { ...(d.vaccineAnswers ?? {}), [id]: answer } } });
+      const birth = parseBR(d.birth) ?? addDays(today(), -365);
+      return nextDoseFromAnswer(answer, id as VaccineId, { species: d.species, birthDate: birth, name: d.name }, today());
+    },
+    setDraftParasite(kind, last, duration) {
+      const d = get().draft;
+      set({ draft: { ...d, parasites: { ...(d.parasites ?? {}), [kind]: { last, duration } } } });
+      return nextFromDuration(last, duration, today());
+    },
+    vaccinePlanNow(opts) {
+      const p = pet();
+      const d = get().draft;
+      const t = today();
+      if (p && d.editingPetId !== null) return vaccinePlan(p, vaccineAnswersOf(get().data.cares), t, opts);
+      if (!p || Object.keys(d.vaccineAnswers ?? {}).length) {
+        const birth = parseBR(d.birth) ?? addDays(t, -365);
+        return vaccinePlan({ species: d.species, birthDate: birth, name: d.name }, d.vaccineAnswers ?? {}, t, opts);
+      }
+      return vaccinePlan(p, vaccineAnswersOf(get().data.cares), t, opts);
+    },
+    async registerVaccineAnswer(id, answer) {
+      const p = pet();
+      const base = careFor(id);
+      const v = vaccineById(id);
+      if (!p || !base || !v) return null;
+      const t = today();
+      const answers = { ...vaccineAnswersOf(get().data.cares), [id]: answer };
+      const series = planSeries(vaccinePlan(p, answers, t))[id];
+      const hadDose = !!(base.history?.length || base.lastDate);
+      const updated = applyVaccineAnswer({ ...base, reminders: [7, 1, 0] }, answer, p, t, series);
+      await saveCare(updated);
+      const next = nextDoseFromAnswer(answer, v, p, t);
+      // dose com data real: carimbo "JÁ APLICADO" + milhas de vacina em dia
+      const realDay = (answer.kind === 'data' || answer.kind === 'mes') ? updated.lastDate : null;
+      if (realDay && !get().data.stamps.some((st) => st.careId === updated.id && st.date === realDay)) {
+        const st = makeCareStamp(updated, realDay, p.name, newId(), 'JÁ APLICADO');
+        upsertLocal('stamps', st);
+        await persist('stamps', st);
+        if (next.status === 'em_dia' && !get().data.ledger.some((e) => e.ref === `vac:${updated.id}:${realDay}`)) await earn('vacina', MILES.vacina, `vac:${updated.id}:${realDay}`);
+      }
+      let paywall: PaywallTriggerId | null = null;
+      if (!hadDose && (answer.kind === 'data' || answer.kind === 'mes' || answer.kind === 'naolembro')) {
+        paywall = get().paywallFor('primeira_vacina');
+        if (paywall) set({ pendingPaywall: paywall });
+      }
+      reschedule();
+      return { next, paywall };
+    },
+    async applyVaccinePlan(opts) {
+      const p = pet();
+      if (!p) return;
+      const t = today();
+      const answers = vaccineAnswersOf(get().data.cares);
+      const plan = vaccinePlan(p, answers, t, opts);
+      for (const it of plan.items) {
+        if (!it.doses.length) continue;
+        const c = careFor(it.vaccine.id);
+        if (!c) continue;
+        const { series: _s, ...rest } = c;
+        await saveCare({ ...rest, nextDate: it.doses[0], active: true, reminders: [7, 1, 0], ...(it.doses.length > 1 ? { series: [...it.doses] } : {}) });
+      }
+      reschedule();
+      get().showToast('Plano colocado na agenda.');
+    },
+    async setParasiteLast(kind, last, duration) {
+      const p = pet();
+      const c = careFor(PARASITE_CODE[kind]);
+      if (!p || !c) return null;
+      const t = today();
+      const r = parasiteCare(c, last, duration, t);
+      await saveCare(r.care);
+      if (r.stampDay) {
+        const st = makeCareStamp(r.care, r.stampDay, p.name, newId());
+        upsertLocal('stamps', st);
+        await persist('stamps', st);
+        if (diffDays(r.stampDay, t) <= 7 && !get().data.ledger.some((e) => e.ref === `${r.care.id}:${r.stampDay}`)) await earn('cuidado', r.care.miles, `${r.care.id}:${r.stampDay}`);
+      }
+      reschedule();
+      return r.next;
+    },
+
+    // ---------------------------------------------------------------- lembretes e remédios
+    async addReminder(input) {
+      const p = pet();
+      if (!p) return null;
+      const t = today();
+      const date = input.date ?? input.med?.startDate ?? t;
+      const med: MedSchedule | undefined = input.med ? { ...input.med, startDate: input.med.startDate ?? date } : undefined;
+      const r: Reminder = {
+        id: newId(), type: input.type, title: (input.title?.trim() || med?.name || reminderTitle(input.type)).trim(),
+        ...(input.note?.trim() ? { note: input.note.trim() } : {}), date,
+        time: med ? med.firstDose : input.time ?? null,
+        repeat: med ? 'daily' : input.repeat ?? 'once', ...(med ? { med } : {}), notify: input.notify ?? true, active: true, createdAt: new Date().toISOString(),
+      };
+      upsertLocal('reminders', r);
+      await persist('reminders', r);
+      reschedule();
+      get().showToast('Lembrete salvo.');
+      return r;
+    },
+    async updateReminder(id, patch) {
+      const r = get().data.reminders.find((x) => x.id === id);
+      if (!r) return;
+      const updated: Reminder = { ...r, ...patch };
+      if (updated.med) updated.time = updated.med.firstDose;
+      upsertLocal('reminders', updated);
+      await persist('reminders', updated);
+      reschedule();
+    },
+    async deleteReminder(id) {
+      const p = pet();
+      if (!p) return;
+      const logs = get().data.doses.filter((d) => d.reminderId === id);
+      set((s) => ({ data: { ...s.data, reminders: s.data.reminders.filter((r) => r.id !== id), doses: s.data.doses.filter((d) => d.reminderId !== id) } }));
+      try { await b().remove(p.id, 'reminders', id); } catch { /* offline */ }
+      for (const l of logs) await b().remove(p.id, 'doses', l.id).catch(() => {});
+      reschedule();
+    },
+    async markDose(reminderId, day, time, status, at) {
+      const p = pet();
+      const r = get().data.reminders.find((x) => x.id === reminderId);
+      if (!p || !r) return null;
+      const key = doseKey(reminderId, day, time || '0000');
+      const scheduled = atTime(day, time && time !== '0000' ? time : '12:00');
+      const givenAt = at ? new Date(at) : new Date();
+      const log: DoseLog = {
+        id: key, reminderId, day, time: time || '0000',
+        status: status === 'skipped' ? 'skipped' : r.type === 'remedio' ? statusForGiven(scheduled, givenAt) : 'given',
+        ...(status === 'given' ? { givenAt: givenAt.toISOString() } : {}), loggedAt: new Date().toISOString(),
+      };
+      const already = get().data.doses.find((d) => d.id === key);
+      upsertLocal('doses', log);
+      await persist('doses', log);
+      if (status === 'given' && !already) {
+        haptic('success');
+        let m = 0;
+        if (r.type === 'remedio') { if (onTime(scheduled, givenAt)) m = await earn('remedio', MILES.remedio, key); }
+        else if (r.type === 'passeio') m = await earn('passeio', MILES.passeio, key);
+        else m = await earn('rotina', MILES.rotina, key);
+        get().showToast(m ? `${r.type === 'remedio' ? 'Dose marcada' : 'Feito'} · +${m} milhas` : r.type === 'remedio' ? 'Dose marcada.' : 'Feito.');
+      } else if (status === 'skipped') get().showToast('Dose pulada. Não dê 2 doses juntas.');
+      reschedule();
+      return log;
+    },
+    async unmarkDose(reminderId, day, time) {
+      const p = pet();
+      if (!p) return;
+      const key = doseKey(reminderId, day, time || '0000');
+      const miles = get().data.ledger.filter((e) => e.ref === key && e.miles > 0);
+      set((s) => ({ data: { ...s.data, doses: s.data.doses.filter((d) => d.id !== key), ledger: s.data.ledger.filter((e) => !miles.includes(e)) } }));
+      await b().remove(p.id, 'doses', key).catch(() => {});
+      for (const e of miles) await b().remove(p.id, 'ledger', e.id).catch(() => {});
+      reschedule();
+    },
+    async applyNightShift(reminderId) {
+      const r = get().data.reminders.find((x) => x.id === reminderId);
+      if (!r?.med) return false;
+      const times = scheduleTimes(r.med);
+      const to = suggestShift(times);
+      if (!to) return false;
+      const delta = shiftMinutes(times, to);
+      const med: MedSchedule = r.med.times?.length ? { ...r.med, times: to, firstDose: to[0] } : { ...r.med, firstDose: minToHHMM(hhmmToMin(r.med.firstDose) + delta) };
+      await get().updateReminder(reminderId, { med });
+      return true;
+    },
+    async markTodayItem(item, opts) {
+      const src = item.source;
+      if (src.type === 'routine') await get().checkRoutine(src.item, opts?.minutes);
+      else await get().markDose(src.reminderId, src.day, src.time, 'given', opts?.at);
+    },
+    async unmarkTodayItem(item) {
+      const src = item.source;
+      if (src.type === 'routine') await get().uncheckRoutine(src.item.key);
+      else await get().unmarkDose(src.reminderId, src.day, src.time);
+    },
+
+    // ---------------------------------------------------------------- milhas, mapa, loja, troca
+    async earnMiles(reason, ref) {
+      if (!pet()) return 0;
+      if (ref && get().data.ledger.some((e) => e.origin === reason && e.ref === ref)) return 0;
+      return earn(reason, MILES[reason], ref);
+    },
+    milesNow() {
+      return milesSummary(get().data.ledger, today());
+    },
+    mapNow() {
+      const lifetime = milesTotals(get().data.ledger).total;
+      const at = (destinationById(pet()?.at ?? 'rio')?.id ?? 'rio') as DestinationId;
+      return { ...mapProgress(lifetime), at };
+    },
+    async travelTo(dest) {
+      const p = pet();
+      const d = destinationById(dest);
+      if (!p || !d) return 'bloqueado';
+      if (milesTotals(get().data.ledger).total < d.min) return 'bloqueado';
+      await savePet({ ...p, at: d.id });
+      if (!get().data.stamps.some((st) => st.kind === 'viagem' && st.destination === d.id)) {
+        const t = today();
+        const st: Stamp = { id: newId(), kind: 'viagem', destination: d.id, code: d.stamp.main, top: d.stamp.top, bottom: d.stamp.bottom, main: d.stamp.main, sub: t.slice(0, 4), color: d.stamp.color, shape: d.stamp.shape, rotation: rotationFor(d.id), date: t };
+        upsertLocal('stamps', st);
+        await persist('stamps', st);
+        haptic('success');
+        set({ stampFx: { top: st.top, bottom: st.bottom, main: st.main, sub: st.sub, color: st.color, miles: 0 } });
+      }
+      return 'ok';
+    },
+    async buyShopItem(itemId) {
+      return get().buy(itemId);
+    },
+    async redeemMonth() {
+      const pr = get().profile;
+      const p = pet();
+      if (!pr || !p) return { ok: false };
+      const { balance } = milesTotals(get().data.ledger);
+      const check = canRedeemMonth(pr.redemptions, new Date(), balance);
+      if (!check.ok) return check;
+      const now = new Date();
+      const entry: LedgerEntry = { id: newId(), at: now.toISOString(), day: today(), origin: 'resgate', miles: -REDEEM_COST, ref: 'primeira-1-mes' };
+      upsertLocal('ledger', entry);
+      await persist('ledger', entry);
+      const st = pr.planState;
+      const from = st?.until && new Date(st.until) > now ? new Date(st.until) : now;
+      const until = new Date(from);
+      until.setMonth(until.getMonth() + REDEEM_MONTHS);
+      await saveProfile({
+        ...pr,
+        redemptions: [...(pr.redemptions ?? []), { id: newId(), at: now.toISOString(), miles: REDEEM_COST, months: REDEEM_MONTHS, petId: p.id }],
+        planState: { ...(st ?? {}), plan: st?.plan ?? (pr.plan === 'economica' ? 'economica' : 'primeira'), until: until.toISOString(), source: 'milhas' },
+      });
+      haptic('success');
+      get().showToast('Pronto! 1 mês de Primeira Classe liberado.');
+      reschedule();
+      return { ok: true };
+    },
+
+    // ---------------------------------------------------------------- notificações
+    async handleNotificationAction(e) {
+      const d = e.data;
+      if (!d) return { route: '/inicio' };
+      if (d.petId && d.petId !== get().activePetId && get().pets.some((x) => x.id === d.petId)) await get().setActivePet(d.petId);
+      if (d.kind === 'dose') {
+        if (e.action === 'dei') { await get().markDose(d.reminderId, d.day, d.time, 'given'); return { petId: d.petId }; }
+        if (e.action === 'adiar15') {
+          const r = get().data.reminders.find((x) => x.id === d.reminderId);
+          const p = get().pets.find((x) => x.id === d.petId);
+          await snoozeDose(d, `Remédio ${p ? `${art(p).do} ${p.name}` : ''} · ${d.time}`.replace('  ', ' '), `${r?.med?.name ?? 'Remédio'} (adiado 15 min). Não dê 2 doses juntas.`).catch(() => {});
+          return { petId: d.petId };
+        }
+        return { route: '/inicio', petId: d.petId };
+      }
+      if (d.kind === 'vacina' || d.kind === 'cuidado') {
+        if (e.action === 'ja_tomou') return { route: `/cuidado/${d.careId}?acao=carimbar`, petId: d.petId };
+        if (e.action === 'mudar_data') return { route: `/cuidado/${d.careId}?acao=mudar-data`, petId: d.petId };
+        return { route: `/cuidado/${d.careId}`, petId: d.petId };
+      }
+      return { route: '/inicio', petId: d.petId };
     },
 
     showToast(msg) {
@@ -876,6 +1371,10 @@ function petContext(p: Pet, data: PetData): string {
     cares ? `Vacinas e cuidados: ${cares}.` : '',
     recent ? `Diário recente: ${recent}.` : '',
   ].filter(Boolean).join('\n');
+}
+
+function reminderTitle(t: ReminderType): string {
+  return ({ remedio: 'Remédio', passeio: 'Passeio', banho: 'Banho e tosa', consulta: 'Consulta', comida: 'Comida', outro: 'Lembrete' } as Record<ReminderType, string>)[t];
 }
 
 function gramsOf(d: Draft): number | null {

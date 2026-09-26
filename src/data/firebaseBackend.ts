@@ -6,7 +6,7 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, deleteDoc, collection, getDocs, query, where, writeBatch,
 } from 'firebase/firestore';
 import { getStorage, connectStorageEmulator, ref as sref, uploadBytes, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
-import type { Pet, UserProfile } from '@/domain/types';
+import { PET_COLLECTIONS, type Pet, type UserProfile } from '@/domain/types';
 import type { AuthUser, Backend, Collection } from './backend';
 
 /**
@@ -106,7 +106,7 @@ export function createFirebaseBackend(config: FirebaseOptions): Backend {
       await setDoc(doc(db, 'pets', p.id), clean(p));
     },
     async deletePet(petId) {
-      const colls: Collection[] = ['cares', 'stamps', 'ledger', 'weights', 'diary', 'chat', 'trips'];
+      const colls: Collection[] = [...PET_COLLECTIONS];
       // subcoleções primeiro (as regras conferem o pet "pai"), em lotes de até 400 (limite do Firestore: 500)
       for (const c of colls) {
         const s = await getDocs(sub(petId, c));

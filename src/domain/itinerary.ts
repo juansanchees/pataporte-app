@@ -124,12 +124,25 @@ export function generateItinerary(
 
 /** Marks a care as done on `day`. Returns the updated care. */
 export function stampCare(care: Care, day: string): Care {
-  const next = addRecurrence(day, care.recurrence);
   const history = Array.from(new Set([...(care.history ?? (care.lastDate ? [care.lastDate] : [])), day])).sort();
   const last = history[history.length - 1];
   // carimbar uma data antiga não pode "voltar" o calendário
   if (last !== day) return { ...care, history };
-  return { ...care, lastDate: day, nextDate: next, active: next !== null, history };
+  // v1.1: série planejada (filhote / adulto sem histórico) — a próxima dose mantém o intervalo planejado a partir de hoje
+  if (care.series?.length) {
+    const [taken, ...rest] = care.series;
+    const shifted = rest.map((d) => addDays(day, Math.max(1, diffDays(taken, d))));
+    if (shifted.length) {
+      const { series: _s, lastApprox: _a, ...base } = care;
+      return { ...base, lastDate: day, nextDate: shifted[0], active: true, history, series: shifted };
+    }
+    const { series: _s, lastApprox: _a, ...base } = care;
+    const next = addRecurrence(day, care.recurrence);
+    return { ...base, lastDate: day, nextDate: next, active: next !== null, history };
+  }
+  const next = care.intervalDays ? addDays(day, care.intervalDays) : addRecurrence(day, care.recurrence);
+  const { lastApprox: _a, ...base } = care;
+  return { ...base, lastDate: day, nextDate: next, active: next !== null, history };
 }
 
 /** Datas já aplicadas (mais antiga primeiro). */

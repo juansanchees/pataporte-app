@@ -20,6 +20,7 @@ const BADGE: Record<ItemState, { label: string; color: string; bg: string }> = {
   sem_saldo: { label: 'FALTAM MILHAS', color: C.inkSoft, bg: C.paper3 },
   bloqueado_nivel: { label: 'NÍVEL 6', color: C.inkSoft, bg: C.paper3 },
   bloqueado_classe: { label: '1ª CLASSE', color: '#35260A', bg: C.gold },
+  bloqueado_destino: { label: 'VIAJAR', color: C.inkSoft, bg: C.paper3 },
 };
 
 export default function DutyFree() {

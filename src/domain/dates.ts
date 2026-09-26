@@ -118,3 +118,105 @@ export function localMonth(iso?: string): string {
   const d = iso ? new Date(iso) : new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
+
+// ------------------------------------------------------------------ v1.1: datas por extenso
+export const MONTH_NAMES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+export const WEEKDAY_NAMES = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+const WEEKDAY_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+/** "14 de março de 2027" */
+export function fmtExtenso(day: string): string {
+  const d = fromDay(day);
+  return `${d.getDate()} de ${MONTH_NAMES[d.getMonth()]} de ${d.getFullYear()}`;
+}
+
+/** "20 de dezembro" (sem o ano) */
+export function fmtDayMonth(day: string): string {
+  const d = fromDay(day);
+  return `${d.getDate()} de ${MONTH_NAMES[d.getMonth()]}`;
+}
+
+/** "Sáb, 3 de outubro" (passos do plano de vacinas) */
+export function fmtStep(day: string): string {
+  const d = fromDay(day);
+  return `${WEEKDAY_ABBR[d.getDay()]}, ${d.getDate()} de ${MONTH_NAMES[d.getMonth()]}`;
+}
+
+/** "sábado, 3 de outubro" */
+export function fmtWeekdayLong(day: string): string {
+  const d = fromDay(day);
+  return `${WEEKDAY_NAMES[d.getDay()]}, ${d.getDate()} de ${MONTH_NAMES[d.getMonth()]}`;
+}
+
+/** "março de 2027" */
+export function fmtMonthYear(day: string): string {
+  const d = fromDay(day);
+  return `${MONTH_NAMES[d.getMonth()]} de ${d.getFullYear()}`;
+}
+
+/** "Outubro 2026" (cabeçalho de mês da Agenda) */
+export function monthTitle(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  const n = MONTH_NAMES[m - 1];
+  return `${n[0].toUpperCase()}${n.slice(1)} ${y}`;
+}
+
+/** "qui" */
+export function weekdayMini(day: string): string {
+  return WEEKDAY_ABBR[fromDay(day).getDay()].toLowerCase();
+}
+
+/** Próximo sábado DEPOIS de `day` (nunca o próprio dia). */
+export function nextSaturday(day: string): string {
+  const dow = fromDay(day).getDay();
+  return addDays(day, ((6 - dow + 7) % 7) || 7);
+}
+
+/** Meses a partir de uma data, respeitando fim de mês (31/01 + 1 = 28/02). */
+export function addMonths(day: string, n: number): string {
+  return addRecurrence(day, { unit: 'month', every: n })!;
+}
+
+/** Idade em meses completos. */
+export function ageMonths(birth: string, on: string): number {
+  const b = fromDay(birth);
+  const t = fromDay(on);
+  let m = (t.getFullYear() - b.getFullYear()) * 12 + (t.getMonth() - b.getMonth());
+  if (t.getDate() < b.getDate()) m--;
+  return Math.max(0, m);
+}
+
+/** "HH:MM" → minutos do dia. */
+export function hhmmToMin(t: string): number {
+  return Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+}
+
+/** minutos (qualquer valor) → "HH:MM" dentro do dia. */
+export function minToHHMM(min: number): string {
+  const m = ((Math.round(min) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+/** Hora local "HH:MM" de um Date. */
+export function hhmmOf(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/** Date local para um dia + "HH:MM". */
+export function atTime(day: string, hhmm: string): Date {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(y, m - 1, d, Number(hhmm.slice(0, 2)), Number(hhmm.slice(3, 5)), 0, 0);
+}
+
+/** "daqui a 12 semanas", "amanhã", "hoje", "há 3 dias". */
+export function relativeLong(from: string, to: string): string {
+  const n = diffDays(from, to);
+  if (n === 0) return 'hoje';
+  if (n === 1) return 'amanhã';
+  if (n === -1) return 'ontem';
+  if (n < 0) return `há ${-n} dias`;
+  if (n < 14) return `daqui a ${n} dias`;
+  if (n <= 16 * 7) return `daqui a ${Math.round(n / 7)} semanas`;
+  const months = Math.round(n / 30.4);
+  return months >= 12 && months % 12 === 0 ? (months === 12 ? 'daqui a 1 ano' : `daqui a ${months / 12} anos`) : `daqui a ${months} meses`;
+}

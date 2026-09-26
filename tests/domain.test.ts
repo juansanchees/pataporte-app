@@ -94,7 +94,7 @@ test('sequência: dias seguidos e zera com atraso', () => {
 });
 
 test('check-in: 3 missões, ração primeiro, marca feito pelo extrato do dia', () => {
-  const data: PetData = { cares: [], stamps: [], ledger: [L(T, 'racao', 2, '07:00')], weights: [], diary: [], chat: [], trips: [] };
+  const data: PetData = { cares: [], stamps: [], ledger: [L(T, 'racao', 2, '07:00')], weights: [], diary: [], chat: [], trips: [], reminders: [], doses: [] };
   const list = checkinsFor(pet, data, T);
   assert.equal(list.length, 3);
   assert.equal(list[0].kind, 'racao');
@@ -102,7 +102,7 @@ test('check-in: 3 missões, ração primeiro, marca feito pelo extrato do dia', 
 });
 
 test('carimbos especiais desbloqueiam por progresso', () => {
-  const data: PetData = { cares: [], stamps: [], ledger: [L(T, 'guia', 10), ...Array.from({ length: 5 }, () => L(T, 'peso', 5))], weights: [], diary: [], chat: [], trips: [] };
+  const data: PetData = { cares: [], stamps: [], ledger: [L(T, 'guia', 10), ...Array.from({ length: 5 }, () => L(T, 'peso', 5))], weights: [], diary: [], chat: [], trips: [], reminders: [], doses: [] };
   const s = specialsFor(pet, data, T);
   assert.equal(s.find((x) => x.id === 'curioso')!.unlocked, true);
   assert.equal(s.find((x) => x.id === 'pena')!.unlocked, true);

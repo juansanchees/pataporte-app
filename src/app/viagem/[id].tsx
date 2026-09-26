@@ -97,7 +97,7 @@ export default function Viagem() {
                   <View style={{ marginLeft: 38, gap: 8 }}>
                     {extra(r)}
                     {r.manual && r.state !== 'ok' ? <T style={{ fontSize: 14.5, color: C.inkSoft }}>Marque a caixinha quando fizer.</T> : null}
-                    {r.reminder && r.state !== 'ok' ? <Button label="Criar lembrete" icon="bell" small variant="ghost" onPress={() => useApp.getState().addReminder(r.reminder!.name, r.reminder!.day)} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} /> : null}
+                    {r.reminder && r.state !== 'ok' ? <Button label="Criar lembrete" icon="bell" small variant="ghost" onPress={() => useApp.getState().addDateReminder(r.reminder!.name, r.reminder!.day)} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} /> : null}
                   </View>
                 </View>
               );
