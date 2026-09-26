@@ -4,9 +4,9 @@ import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 import { backend, newId, type AuthUser, type Collection } from '@/data';
 import { careTypesFor, emissionCareTypes, foodLabel, milesForCategory, codeFromName, mealTimesFor } from '@/domain/catalog';
-import { generateItinerary, historyOf, makeCareStamp, stampCare, rotationFor, type HistoryWhen } from '@/domain/itinerary';
-import { canRedeemMonth, destinationById, earned, levelFor, mapProgress, milesSummary, milesTotals, MILES, REDEEM_COST, REDEEM_MONTHS, streakBonusDue, type DestinationId, type MapProgress, type MilesReason, type MilesSummary, type RedeemCheck } from '@/domain/gamification';
-import { effectivePlan, equip, itemById, itemState, limitsFor, paywallTrigger, pendingRewards, unequip, PRICES, type PaywallEvent, type PlanLimits } from '@/domain/commerce';
+import { generateItinerary, historyOf, makeCareStamp, setNextDate, stampCare, rotationFor, type HistoryWhen } from '@/domain/itinerary';
+import { canRedeemMonth, destinationById, earned, EXTRA_WALK_REF, extraWalkEarns, levelFor, mapProgress, milesSummary, milesTotals, MILES, REDEEM_COST, REDEEM_MONTHS, streakBonusDue, type DestinationId, type MapProgress, type MilesReason, type MilesSummary, type RedeemCheck } from '@/domain/gamification';
+import { effectivePlan, equip, itemById, itemState, limitsFor, paywallTrigger, pendingRewards, trialNoticeAt, unequip, PRICES, type PaywallEvent, type PlanLimits } from '@/domain/commerce';
 import { applyVaccineAnswer, planSeries, vaccineById, vaccinePlan, nextDoseFromAnswer, type NextDose, type PlanOptions, type VaccineId, type VaccinePlan } from '@/domain/vaccines';
 import { durationMonths, nextFromDuration, PARASITE_CODE, type ParasiteKind, type ParasiteNext } from '@/domain/parasites';
 import { doseKey, onTime, scheduleTimes, shiftMinutes, statusForGiven, suggestShift } from '@/domain/meds';
@@ -15,13 +15,14 @@ import { migratePetData, migrateProfile } from '@/domain/migrate';
 import { answerGuide } from '@/domain/guide';
 import { aiEnabled, aiErrorText, askGuideAI, imageForAi, readBase64 } from '@/services/ai';
 import { newPassportNumber } from '@/domain/mrz';
-import { addDays, addRecurrence, ageYears, atTime, diffDays, hhmmToMin, localMonth, minToHHMM, parseBR, today } from '@/domain/dates';
+import { addDays, addRecurrence, ageYears, atTime, diffDays, fmtBR, hhmmToMin, localMonth, minToHHMM, parseBR, today } from '@/domain/dates';
 import { breedContext } from '@/domain/breeds';
-import { EMPTY_PET_DATA, PET_COLLECTIONS, type Care, type CareCategory, type ChatMsg, type DiaryEntry, type DiaryKind, type DoseLog, type HistoryAnswer, type LastAnswer, type ParasiteDuration, type PaywallTriggerId, type Reminder, type ReminderRepeat, type ReminderType, type MedSchedule, type Trip, type LedgerEntry, type LedgerOrigin, type Pet, type PetData, type PetDetails, type Plan, type Recurrence, type Species, type Stamp, type TriState, type UserProfile, type VaccineAnswer } from '@/domain/types';
+import { EMPTY_PET_DATA, PET_COLLECTIONS, type Care, type CareCategory, type ChatMsg, type DiaryEntry, type DiaryKind, type DoseLog, type HistoryAnswer, type LastAnswer, type ParasiteDuration, type PaywallTriggerId, type Reminder, type ReminderRepeat, type ReminderType, type MedSchedule, type Trip, type LedgerEntry, type LedgerOrigin, type Pet, type PetData, type PetDetails, type Plan, type PlanState, type Recurrence, type Species, type Stamp, type TeethCare, type TriState, type UserProfile, type VaccineAnswer } from '@/domain/types';
 import { registerNotificationHandler, rescheduleAll, snoozeDose, type NotificationActionEvent } from '@/services/notifications';
 import { backupPhoto, hasCloud, splitPhoto } from '@/services/photos';
+import { removeEntries, seasonId } from '@/services/ranking';
 import { appleSignIn, googleSignIn, socialSignOut } from '@/services/socialAuth';
-import { dayRecap, routineItems, routineProgress, type RoutineItem } from '@/domain/routine';
+import { dayRecap, defaultRoutine, routineItems, routineProgress, type RoutineItem } from '@/domain/routine';
 import type { PetSize, Routine } from '@/domain/types';
 import { COVER_COLORS } from '@/theme';
 import { art } from '@/domain/words';
@@ -60,6 +61,8 @@ export interface Draft {
   vaccineAnswers?: Partial<Record<string, VaccineAnswer>>;
   /** v1.1 cadastro · capítulo 4: vermífugo e antipulgas (separados) */
   parasites?: Partial<Record<ParasiteKind, { last: LastAnswer; duration: ParasiteDuration }>>;
+  /** v1.1 cadastro · capítulo 5: "Você escova os dentes?" (escova = liga "Escovar os dentes" na rotina) */
+  teethCare?: TeethCare;
 }
 
 /** Entrada de "+ Lembrete". Remédio: passe `med` (title vira o nome do remédio se vazio). */
@@ -191,6 +194,10 @@ interface State {
   /** Conta 1 leitura de carteirinha por foto (limite mensal da classe). */
   consumeCardScan(): Promise<'ok' | 'limit'>;
   setCity(city: string): Promise<void>;
+  /** Veterinário de confiança (tela de Emergência). null apaga. */
+  setVet(vet: { name?: string; phone: string } | null): Promise<void>;
+  /** Compra real na loja (RevenueCat): grava planState.source='loja' + until (e o fim do teste, se for teste). */
+  applyStorePurchase(p: { isTrial: boolean; expiresAt: string | null; period?: 'mensal' | 'anual' }): Promise<void>;
 
   setDraftVaccine(id: string, answer: VaccineAnswer): NextDose;
   setDraftParasite(kind: ParasiteKind, last: LastAnswer, duration: ParasiteDuration): ParasiteNext;
@@ -213,6 +220,10 @@ interface State {
   unmarkDose(reminderId: string, day: string, time: string): Promise<void>;
   /** Aplica a sugestão de horários fora da madrugada (muda med.firstDose). false = não precisa/impossível. */
   applyNightShift(reminderId: string): Promise<boolean>;
+  /** Passeio extra agora (sem horário na rotina nem lembrete): +10 milhas (até 3 por dia) e vai para o diário. */
+  recordWalk(minutes?: string): Promise<number>;
+  /** "Mudar data": muda a data da próxima dose de um cuidado (sem carimbar). */
+  setCareNextDate(careId: string, day: string): Promise<void>;
   /** Marca um item da lista "Hoje" (rotina, dose ou lembrete). */
   markTodayItem(item: TodayItem, opts?: { at?: Date | string; minutes?: string }): Promise<void>;
   unmarkTodayItem(item: TodayItem): Promise<void>;
@@ -371,6 +382,15 @@ export const useApp = create<State>((set, get) => {
     if (kg !== p.weightKg) await savePet({ ...p, weightKg: kg });
   }
 
+  /** Tira os pets do ranking público (temporada atual e a anterior). Nunca trava a exclusão. */
+  async function dropRanking(petIds: string[]) {
+    const uid = get().user?.uid;
+    if (!uid || !petIds.length) return;
+    const t = today();
+    const seasons = [seasonId(t), seasonId(addDays(`${seasonId(t)}-01`, -1))];
+    try { await withTimeout(Promise.all(seasons.map((s) => removeEntries(uid, petIds, s))), 5000); } catch { /* sem internet: fica para depois */ }
+  }
+
   // ---------------------------------------------------------------- backup das fotos na nuvem
   /** Foto do passaporte: sobe em segundo plano e grava a referência com o link da nuvem. */
   async function cloudPetPhoto(petId: string, refNow: string) {
@@ -428,7 +448,8 @@ export const useApp = create<State>((set, get) => {
           reminders: await withTimeout(b().list<Reminder>(p.id, 'reminders'), 8000).catch(() => [] as Reminder[]),
           doses: await withTimeout(b().list<DoseLog>(p.id, 'doses'), 8000).catch(() => [] as DoseLog[]),
         }));
-      await rescheduleAll(list, profile?.notifyHour ?? 9, notificationsOn, { plan: effectivePlan(profile) }).catch(() => {});
+      const hour = profile?.notifyHour ?? 9;
+      await rescheduleAll(list, hour, notificationsOn, { plan: effectivePlan(profile), trialNoticeAt: trialNoticeAt(profile?.planState, hour) }).catch(() => {});
     });
   }
 
@@ -553,6 +574,7 @@ export const useApp = create<State>((set, get) => {
           mealsPerDay: p.mealsPerDay === undefined ? p.mealTimes.length || 2 : p.mealsPerDay, grams: p.gramsPerDay ? String(p.gramsPerDay) : '',
           gramsUnknown: p.gramsPerDay === null, photoUri: p.photoUri ?? '', aiSummary: '',
           ancestry: [...(p.ancestry ?? [])], size: p.size ?? null, temperament: [...(p.temperament ?? [])],
+          ...(p.teethCare ? { teethCare: p.teethCare } : {}),
         },
       });
     },
@@ -573,6 +595,8 @@ export const useApp = create<State>((set, get) => {
         conditions: draft.conditions.trim(), meds: draft.meds.trim(), food: draft.food, mealTimes: [...draft.mealTimes].sort(),
         mealsPerDay: draft.mealsPerDay, gramsPerDay: gramsOf(draft), ...(draft.photoUri ? { photoUri: draft.photoUri } : {}),
         ancestry: draft.ancestry, temperament: draft.temperament, ...(draft.size ? { size: draft.size } : {}),
+        ...(draft.teethCare ? { teethCare: draft.teethCare } : {}),
+        ...(draft.teethCare === 'escova' ? { routine: { ...defaultRoutine(draft.species), teeth: true } } : {}),
         passportNumber: newPassportNumber(), coverColor: COVER_COLORS[pets.length % COVER_COLORS.length], issuedAt: now,
         owned: [], equipped: [], createdAt: now,
       };
@@ -636,6 +660,7 @@ export const useApp = create<State>((set, get) => {
         allergies: draft.allergies.trim(), conditions: draft.conditions.trim(), meds: draft.meds.trim(), food: draft.food, mealTimes: [...draft.mealTimes].sort(),
         mealsPerDay: draft.mealsPerDay, gramsPerDay: gramsOf(draft),
         ancestry: draft.ancestry, temperament: draft.temperament, ...(draft.size ? { size: draft.size } : {}),
+        ...(draft.teethCare ? { teethCare: draft.teethCare } : {}),
       };
       await savePet(updated);
       if (updated.photoUri) cloudPetPhoto(updated.id, updated.photoUri);
@@ -858,6 +883,7 @@ export const useApp = create<State>((set, get) => {
     },
 
     async deleteAccount() {
+      await dropRanking(get().pets.map((x) => x.id));
       try {
         await b().deleteAccount();
       } catch (e) {
@@ -877,6 +903,7 @@ export const useApp = create<State>((set, get) => {
       const urls = [p.photoUri ?? '', ...get().data.diary.map((e) => e.uri), ...get().data.chat.map((m) => m.photoUri ?? '')]
         .map((r) => splitPhoto(r).cloud).filter(Boolean);
       if (urls.length) await b().deletePhotos(urls).catch(() => undefined);
+      await dropRanking([p.id]);
       await b().deletePet(p.id);
       const pets = get().pets.filter((x) => x.id !== p.id);
       const next = pets[0]?.id ?? null;
@@ -1085,6 +1112,28 @@ export const useApp = create<State>((set, get) => {
       if (!pr) return;
       await saveProfile({ ...pr, city: city.trim() });
     },
+    async setVet(vet) {
+      const pr = get().profile;
+      if (!pr) return;
+      const { vet: _old, ...rest } = pr;
+      const phone = vet?.phone.trim() ?? '';
+      const name = vet?.name?.trim() ?? '';
+      await saveProfile(phone ? { ...rest, vet: { phone, ...(name ? { name } : {}) } } : rest);
+    },
+    async applyStorePurchase({ isTrial, expiresAt, period }) {
+      const pr = get().profile;
+      if (!pr) return;
+      const st = pr.planState;
+      const trialEnd = isTrial && expiresAt ? expiresAt : st?.trialEndsAt;
+      const planState: PlanState = {
+        plan: 'primeira', source: 'loja',
+        ...(expiresAt ? { until: expiresAt } : {}),
+        ...(trialEnd ? { trialEndsAt: trialEnd } : {}),
+        ...(period ?? st?.period ? { period: period ?? st?.period } : {}),
+      };
+      await saveProfile({ ...pr, planState });
+      reschedule();
+    },
 
     // ---------------------------------------------------------------- cadastro: vacinas e parasitas
     setDraftVaccine(id, answer) {
@@ -1254,6 +1303,26 @@ export const useApp = create<State>((set, get) => {
       await get().updateReminder(reminderId, { med });
       return true;
     },
+    async recordWalk(minutes) {
+      const p = pet();
+      if (!p) return 0;
+      const t = today();
+      const stamp = Date.now();
+      const m = extraWalkEarns(get().data.ledger, t) ? await earn('passeio', MILES.passeio, `${EXTRA_WALK_REF}${stamp}`) : 0;
+      const e: DiaryEntry = { id: `walk-${t}-${stamp}`, day: t, topic: 'passeio', kind: 'passeio', uri: '', note: 'Passeio extra registrado.', tags: minutes ? [minutes] : [] };
+      upsertLocal('diary', e);
+      await persist('diary', e);
+      haptic('success');
+      get().showToast(m ? `Passeio registrado · +${m} milhas` : 'Passeio registrado no diário.');
+      return m;
+    },
+    async setCareNextDate(careId, day) {
+      const care = get().data.cares.find((c) => c.id === careId);
+      if (!care) return;
+      await saveCare(setNextDate(care, day));
+      reschedule();
+      get().showToast(`Nova data: ${fmtBR(day)}. Vamos avisar antes.`);
+    },
     async markTodayItem(item, opts) {
       const src = item.source;
       if (src.type === 'routine') await get().checkRoutine(src.item, opts?.minutes);
@@ -1328,6 +1397,7 @@ export const useApp = create<State>((set, get) => {
     async handleNotificationAction(e) {
       const d = e.data;
       if (!d) return { route: '/inicio' };
+      if (d.kind === 'plano') return { route: '/planos' };
       if (d.petId && d.petId !== get().activePetId && get().pets.some((x) => x.id === d.petId)) await get().setActivePet(d.petId);
       if (d.kind === 'dose') {
         if (e.action === 'dei') { await get().markDose(d.reminderId, d.day, d.time, 'given'); return { petId: d.petId }; }

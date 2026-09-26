@@ -263,6 +263,16 @@ export function streakBonusDue(ledger: LedgerEntry[], today: string): boolean {
   return !ledger.some((e) => e.origin === 'sequencia' && e.day === today);
 }
 
+/** Passeio extra (fora dos horários da rotina): prefixo do `ref` no extrato e limite diário de milhas. */
+export const EXTRA_WALK_REF = 'extra-';
+export const EXTRA_WALKS_PAID_PER_DAY = 3;
+
+/** O próximo passeio extra de hoje ainda vale milhas? (até 3 por dia; depois só vai para o diário) */
+export function extraWalkEarns(ledger: LedgerEntry[], today: string): boolean {
+  const paid = ledger.filter((e) => e.day === today && e.origin === 'passeio' && e.miles > 0 && (e.ref ?? '').startsWith(EXTRA_WALK_REF)).length;
+  return paid < EXTRA_WALKS_PAID_PER_DAY;
+}
+
 // ------------------------------------------------------------------ mapa-múndi (viajar NÃO gasta milhas)
 export type DestinationId = 'rio' | 'buenos_aires' | 'lisboa' | 'paris' | 'toquio';
 export interface Destination {

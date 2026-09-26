@@ -5,11 +5,11 @@ import { addDays, atTime, fmtExtenso, nextSaturday, relativeLong } from '../src/
 import { isPuppy, nextDoseFromAnswer, vaccinePlan, vaccinesFor, planSeries } from '../src/domain/vaccines';
 import { nextFromDuration, durationMonths, parasiteTimeline } from '../src/domain/parasites';
 import { doseStatus, doseTimes, dosesForDay, hasNightDose, suggestShift, summary, statusForGiven, shiftMinutes } from '../src/domain/meds';
-import { canRedeemMonth, careStreak, mapProgress, milesSummary, seasonLevel, streakBonusDue, earned, milesFor } from '../src/domain/gamification';
-import { can, effectivePlan, itemById, itemState, limitsFor, paywallTrigger, PAID_PLANS, PLANS, PRICES } from '../src/domain/commerce';
+import { canRedeemMonth, careStreak, mapProgress, milesSummary, seasonLevel, streakBonusDue, earned, milesFor, extraWalkEarns, EXTRA_WALK_REF } from '../src/domain/gamification';
+import { activeTrialEnd, can, effectivePlan, itemById, itemState, limitsFor, paywallTrigger, trialNoticeAt, PAID_PLANS, PLANS, PRICES } from '../src/domain/commerce';
 import { agendaByMonth, agoraItem, nextVaccine, progress, todayItems, occursOn } from '../src/domain/today';
 import { migrateCare, migratePetData } from '../src/domain/migrate';
-import { stampCare } from '../src/domain/itinerary';
+import { setNextDate, stampCare } from '../src/domain/itinerary';
 import type { Care, DoseLog, LedgerEntry, MedSchedule, Pet, Reminder } from '../src/domain/types';
 
 const T = '2026-09-26'; // sábado
@@ -299,4 +299,41 @@ test('série planejada: carimbar a 1ª dose mantém 21 dias até a 2ª', () => {
   const d2 = stampCare(d1, '2026-10-26');
   assert.equal(d2.nextDate, '2027-10-26');
   assert.equal(d2.series, undefined);
+});
+
+// ------------------------------------------------------------------ integração v1.1
+test('paywall: gráfico de peso bloqueado só na Econômica', () => {
+  assert.equal(paywallTrigger('grafico_peso', { plan: 'economica', paid: true }), 'grafico_peso');
+  assert.equal(paywallTrigger('grafico_peso', { plan: 'primeira', paid: true }), null);
+  assert.equal(paywallTrigger('grafico_peso', { plan: 'economica', paid: false }), null);
+});
+
+test('mudar data: só a próxima dose; série anda junto', () => {
+  const c = care({ lastDate: '2026-03-01', nextDate: '2027-03-01' });
+  const moved = setNextDate(c, '2027-03-10');
+  assert.equal(moved.nextDate, '2027-03-10');
+  assert.equal(moved.lastDate, '2026-03-01');
+  assert.equal(moved.history, undefined);
+  const s = setNextDate(care({ nextDate: '2026-10-03', series: ['2026-10-03', '2026-10-24'] }), '2026-10-10');
+  assert.deepEqual(s.series, ['2026-10-10', '2026-10-31']);
+  assert.equal(s.nextDate, '2026-10-10');
+});
+
+test('passeio extra: milhas até 3 por dia', () => {
+  const walks = [1, 2].map((i) => L(T, 'passeio', 10, `${EXTRA_WALK_REF}${i}`));
+  assert.equal(extraWalkEarns([...walks, L(T, 'passeio', 10, 'passeio-08:00')], T), true);
+  assert.equal(extraWalkEarns([...walks, L(T, 'passeio', 10, `${EXTRA_WALK_REF}3`)], T), false);
+  assert.equal(extraWalkEarns([...walks, L('2026-09-25', 'passeio', 10, `${EXTRA_WALK_REF}3`)], T), true);
+});
+
+test('teste grátis: aviso 2 dias antes; some se a classe mudar', () => {
+  const now = new Date('2026-09-26T12:00:00');
+  const end = new Date('2026-10-03T12:00:00').toISOString();
+  const at = trialNoticeAt({ plan: 'economica', source: 'trial', trialEndsAt: end }, 9, now)!;
+  assert.equal(at.getDate(), 1);
+  assert.equal(at.getHours(), 9);
+  assert.equal(activeTrialEnd({ plan: 'primeira', source: 'loja', trialEndsAt: end, until: end }, now), end);
+  assert.equal(activeTrialEnd({ plan: 'primeira', source: 'loja', trialEndsAt: end, until: '2027-10-03T12:00:00Z' }, now), null);
+  assert.equal(trialNoticeAt({ plan: 'primeira', source: 'simulado', trialEndsAt: end }, 9, now), null);
+  assert.equal(trialNoticeAt({ plan: 'economica', source: 'trial', trialEndsAt: new Date('2026-09-27T12:00:00').toISOString() }, 9, now), null);
 });

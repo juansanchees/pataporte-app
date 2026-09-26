@@ -1,5 +1,5 @@
 import { DESTINATIONS, LEVELS, levelFor, milesTotals, type DestinationId } from './gamification';
-import type { LedgerEntry, PaywallTriggerId, Pet, Plan, UserProfile } from './types';
+import type { LedgerEntry, PaywallTriggerId, Pet, Plan, PlanState, UserProfile } from './types';
 
 // ------------------------------------------------------------------ classes (planos)
 /**
@@ -124,6 +124,29 @@ export function trialDaysLeft(profile: Pick<UserProfile, 'planState'> | null | u
   return Math.max(0, Math.ceil((new Date(end).getTime() - now.getTime()) / 86400000));
 }
 
+/** Dias antes do fim do teste grátis em que avisamos (paywall: "Avisamos 2 dias antes de cobrar."). */
+export const TRIAL_NOTICE_DAYS = 2;
+
+/**
+ * Fim do teste grátis que ainda está valendo (teste simulado ou teste da loja), ou null.
+ * Se a classe mudou depois (assinou sem teste, trocou milhas, voltou para a Econômica), não há aviso.
+ */
+export function activeTrialEnd(st: PlanState | null | undefined, now: Date = new Date()): string | null {
+  if (!st?.trialEndsAt || new Date(st.trialEndsAt).getTime() <= now.getTime()) return null;
+  if (st.source === 'trial') return st.trialEndsAt;
+  if (st.source === 'loja' && st.until === st.trialEndsAt) return st.trialEndsAt;
+  return null;
+}
+
+/** Quando mandar o aviso "Seu teste termina em 2 dias" (às `hour`), ou null se já passou / não há teste. */
+export function trialNoticeAt(st: PlanState | null | undefined, hour: number, now: Date = new Date()): Date | null {
+  const end = activeTrialEnd(st, now);
+  if (!end) return null;
+  const at = new Date(new Date(end).getTime() - TRIAL_NOTICE_DAYS * 86400000);
+  at.setHours(hour, 0, 0, 0);
+  return at.getTime() > now.getTime() ? at : null;
+}
+
 // ------------------------------------------------------------------ paywall (spec §6)
 export type PaywallEvent = PaywallTriggerId | 'home';
 
@@ -134,6 +157,7 @@ export const PAYWALL_SCREENS: Record<PaywallTriggerId, { design: string; title: 
   ia_foto: { design: 'Paywall-Foto (8d)', title: () => 'Mande a foto da receita, do exame ou da bula' },
   segundo_pet: { design: 'Paywall-Pet (8e)', title: () => 'Cuide de até 5 pets' },
   compartilhar: { design: 'Paywall-Compartilhar (8f)', title: () => 'Compartilhe o passaporte' },
+  grafico_peso: { design: 'Paywall (folha curta) · gráfico de peso', title: (pet) => `Veja o peso ${pet ? `do ${pet}` : 'do seu pet'} num gráfico` },
 };
 
 export interface PaywallState {
@@ -157,6 +181,7 @@ export interface PaywallState {
  * - ia_foto: ao anexar foto ao Guia na Econômica.
  * - segundo_pet: ao adicionar pet além do limite.
  * - compartilhar: ao tocar "Compartilhar passaporte" na Econômica.
+ * - grafico_peso: ao tocar no gráfico de peso bloqueado na Econômica.
  */
 export function paywallTrigger(event: PaywallEvent, state: PaywallState): PaywallTriggerId | null {
   const paid = state.paid ?? PAID_PLANS;
@@ -175,6 +200,8 @@ export function paywallTrigger(event: PaywallEvent, state: PaywallState): Paywal
       return (state.petCount ?? 0) >= L.maxPets ? 'segundo_pet' : null;
     case 'compartilhar':
       return L.share ? null : 'compartilhar';
+    case 'grafico_peso':
+      return L.weightChart ? null : 'grafico_peso';
     default:
       return null;
   }

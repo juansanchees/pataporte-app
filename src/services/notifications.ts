@@ -29,7 +29,9 @@ export type NotificationData =
   | { kind: 'vacina'; petId: string; careId: string; date: string }
   | { kind: 'cuidado'; petId: string; careId: string; date: string }
   | { kind: 'lembrete'; petId: string; reminderId: string; day: string; time: string }
-  | { kind: 'rotina' | 'atraso'; petId: string };
+  | { kind: 'rotina' | 'atraso'; petId: string }
+  /** aviso do fim do teste grátis (abre /planos) */
+  | { kind: 'plano' };
 
 export interface NotificationActionEvent {
   /** botão tocado; 'abrir' = tocou na notificação em si */
@@ -144,6 +146,8 @@ export interface ScheduleOptions {
   /** classe que vale agora (effectivePlan) — com PAID_PLANS, Econômica não recebe alertas de vacina nem alarmes de dose */
   plan?: Plan;
   paid?: boolean;
+  /** v1.1: quando avisar "Seu teste da Primeira Classe termina em 2 dias" (trialNoticeAt); ausente = sem aviso */
+  trialNoticeAt?: Date | null;
 }
 
 /** Quantas horas à frente as doses de remédio são agendadas (reagendado a cada abertura/ação). */
@@ -159,6 +163,18 @@ export const VACCINE_ALERT_DAYS = [7, 1, 0];
 export async function rescheduleAll(pets: ScheduleInput[], hour: number, enabled: boolean, opts: ScheduleOptions = {}) {
   if (Platform.OS === 'web') return;
   await Notifications.cancelAllScheduledNotificationsAsync();
+  // aviso do fim do teste grátis: é aviso de cobrança, então vai mesmo com os lembretes desligados
+  // (só se o celular já deu permissão — sem pedir de novo)
+  let reserved = 0;
+  if (opts.trialNoticeAt && opts.trialNoticeAt.getTime() > Date.now()) {
+    const granted = enabled || (await Notifications.getPermissionsAsync().catch(() => ({ granted: false }))).granted;
+    if (granted && (await ensurePermission())) {
+      await Notifications.scheduleNotificationAsync({
+        content: { title: 'Seu teste da Primeira Classe termina em 2 dias', body: 'Depois disso a assinatura renova sozinha. Para cancelar, é só ir em Assinaturas na loja do celular.', data: { kind: 'plano' } },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: opts.trialNoticeAt, channelId: CHANNEL },
+      }).then(() => { reserved = 1; }).catch(() => {});
+    }
+  }
   if (!enabled) return;
   const ok = await ensurePermission();
   if (!ok) return;
@@ -170,7 +186,7 @@ export async function rescheduleAll(pets: ScheduleInput[], hour: number, enabled
 
   const now = Date.now();
   const t = today();
-  let budget = IOS_LIMIT;
+  let budget = IOS_LIMIT - reserved;
   type Job = { at: Date; title: string; body: string; data?: NotificationData; category?: string };
   const schedule = async (j: Job) => {
     if (budget <= 0) return;

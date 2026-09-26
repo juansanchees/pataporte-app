@@ -59,7 +59,12 @@ export interface Pet {
   createdAt: string;
   /** v1.1: destino do mapa onde o avatar está (ex.: 'paris'); padrão 'rio' */
   at?: string;
+  /** v1.1: escovação dos dentes (cadastro, capítulo 5) */
+  teethCare?: TeethCare;
 }
+
+/** Você escova os dentes do pet? escova = sim, toda semana. */
+export type TeethCare = 'escova' | 'as_vezes' | 'nao' | 'nao_sei';
 
 /** Rotina diária (além das refeições, que vêm de mealTimes). */
 export interface Routine {
@@ -265,9 +270,11 @@ export interface UserProfile {
   paywallSeen?: Partial<Record<PaywallTriggerId, string>>;
   /** leituras de carteirinha por foto no mês */
   cardScans?: { month: string; count: number };
+  /** veterinário de confiança (tela de Emergência) */
+  vet?: { name?: string; phone: string };
 }
 
-export type PaywallTriggerId = 'primeira_vacina' | 'ia_4a_pergunta' | 'ia_foto' | 'segundo_pet' | 'compartilhar';
+export type PaywallTriggerId = 'primeira_vacina' | 'ia_4a_pergunta' | 'ia_foto' | 'segundo_pet' | 'compartilhar' | 'grafico_peso';
 
 export interface PlanState {
   plan: 'economica' | 'primeira';

@@ -145,6 +145,19 @@ export function stampCare(care: Care, day: string): Care {
   return { ...base, lastDate: day, nextDate: next, active: next !== null, history };
 }
 
+/**
+ * "Mudar data": muda só a data da PRÓXIMA dose (não carimba nada). Numa série planejada (filhote / adulto
+ * sem histórico) as doses seguintes andam junto, mantendo o intervalo planejado.
+ */
+export function setNextDate(care: Care, day: string): Care {
+  if (care.series?.length) {
+    const delta = care.nextDate ? diffDays(care.nextDate, day) : 0;
+    const [, ...rest] = care.series;
+    return { ...care, nextDate: day, active: true, series: [day, ...rest.map((d) => addDays(d, delta))] };
+  }
+  return { ...care, nextDate: day, active: true };
+}
+
 /** Datas já aplicadas (mais antiga primeiro). */
 export function historyOf(care: Care): string[] {
   return care.history?.length ? [...care.history].sort() : care.lastDate ? [care.lastDate] : [];
