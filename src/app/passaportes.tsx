@@ -57,9 +57,13 @@ export default function SeusPets() {
   };
   const add = () => {
     const s = useApp.getState();
-    const gatilho = s.paywallFor('segundo_pet'); // paywallTrigger do domínio (null com PAID_PLANS desligado)
-    if (gatilho) { router.replace(paywallRoute(gatilho) as never); return; }
-    if (!s.canAddPetNow().ok) { s.showToast(`Por enquanto cabem até ${s.limits().maxPets} pets por conta.`); return; }
+    // acima do limite: Econômica → paywall "segundo_pet"; Primeira Classe (limite de 5) → só avisa
+    const r = s.canAddPetNow();
+    if (!r.ok) {
+      if (r.paywall || s.plan() === 'economica') { router.replace(paywallRoute(r.paywall ?? 'segundo_pet') as never); return; }
+      s.showToast(`Por enquanto cabem até ${s.limits().maxPets} pets por conta.`);
+      return;
+    }
     s.startNewPassport();
     router.replace('/emissao/foto');
   };

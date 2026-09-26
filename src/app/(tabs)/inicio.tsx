@@ -56,6 +56,8 @@ export default function Inicio() {
   const { width } = useWindowDimensions();
   const now = useNow();
   const [walkItem, setWalkItem] = useState<TodayItem | null>(null);
+  /** passeio extra (nada agendado agora): registra direto, sem lembrete */
+  const [extraWalk, setExtraWalk] = useState(false);
   const [editRoutine, setEditRoutine] = useState(false);
   const [showDone, setShowDone] = useState(false);
   const t = toDay(now);
@@ -99,8 +101,7 @@ export default function Inicio() {
   const walkShortcut = () => {
     const pend = v.items.find((i) => i.kind === 'passeio' && !i.done);
     if (pend) return act(pend);
-    if (v.items.some((i) => i.kind === 'passeio')) { useApp.getState().showToast(`Os passeios de hoje já estão marcados. Bom trabalho!`); return; }
-    router.push(newReminderRoute('passeio') as never);
+    setExtraWalk(true);
   };
 
   const agoraKey = v.agora?.item.key;
@@ -291,6 +292,9 @@ export default function Inicio() {
 
       <WalkSheet visible={!!walkItem} petName={`${a.do} ${pet.name}`} onClose={() => setWalkItem(null)}
         onPick={(m) => { const it = walkItem; setWalkItem(null); if (it) mark(it, m); }} />
+      <WalkSheet visible={extraWalk} petName={`${a.do} ${pet.name}`} onClose={() => setExtraWalk(false)}
+        onPick={(m) => { setExtraWalk(false); useApp.getState().recordWalk(m); }}
+        onReminder={() => { setExtraWalk(false); router.push(newReminderRoute('passeio') as never); }} />
       {editRoutine && <RoutineEditor routine={routineOf(pet)} species={pet.species} onClose={() => setEditRoutine(false)} />}
     </View>
   );

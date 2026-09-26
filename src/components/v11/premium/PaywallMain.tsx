@@ -62,12 +62,12 @@ export function DevNote() {
   );
 }
 
-export function PaywallMain({ gatilho }: { gatilho: Gatilho | null }) {
+export function PaywallMain({ gatilho, from }: { gatilho: Gatilho | null; from?: string }) {
   const pet = useActivePet();
   const profile = useApp((s) => s.profile);
   const plan = useApp((s) => s.plan());
   const insets = useSafeAreaInsets();
-  const { prices, busy, buy, restoreNow, close, compare } = usePaywall(gatilho);
+  const { prices, busy, buy, restoreNow, close, compare } = usePaywall(gatilho, { from });
   const [sel, setSel] = useState<'primeira' | 'economica'>('primeira');
   const [period, setPeriod] = useState<'annual' | 'monthly'>('annual');
   const petName = pet?.name ?? '';
@@ -175,7 +175,7 @@ export function PaywallMain({ gatilho }: { gatilho: Gatilho | null }) {
             )}
           </View>
           <T v="bold" style={{ marginTop: 8, marginHorizontal: 4, fontSize: 15, lineHeight: 20, color: C.inkSoft, textAlign: 'center' }}>
-            {trialUsed ? `${price}. Renova sozinho. Cancele quando quiser.` : `Grátis por ${PRICES.trialDays} dias, depois ${price}. Renova sozinho. Cancele quando quiser.`}
+            {trialUsed ? `${price}. Renova sozinho. Cancele quando quiser.` : `Grátis por ${PRICES.trialDays} dias, depois ${price}. Avisamos 2 dias antes de cobrar. Renova sozinho. Cancele quando quiser.`}
           </T>
           {sel === 'primeira' && <TextButton label="Continuar na Econômica" onPress={close} />}
           <LegalLinks onRestore={restoreNow} restoring={busy === 'restore'} />

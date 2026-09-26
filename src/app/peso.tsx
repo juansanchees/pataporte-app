@@ -54,7 +54,7 @@ export default function Peso() {
           <View style={{ backgroundColor: C.paper2, borderWidth: 2, borderStyle: 'dashed', borderColor: C.inkFaint, borderRadius: 14, padding: 18, gap: 10, alignItems: 'center' }}>
             <Icon name="lock" size={22} color={C.inkSoft} />
             <T v="bold" style={{ textAlign: 'center' }}>O gráfico de evolução é exclusivo da Primeira Classe.</T>
-            <Button small label="Ver planos" onPress={() => router.push('/planos')} />
+            <Button small label="Ver planos" onPress={() => router.push(`/planos?gatilho=${useApp.getState().paywallFor('grafico_peso') ?? 'grafico_peso'}` as never)} />
           </View>
         ) : pts.length >= 2 && (
           <View style={{ backgroundColor: C.sheet, borderWidth: 1, borderColor: C.line, borderRadius: 14, paddingVertical: 12 }}>

@@ -9,7 +9,7 @@ import { CircleStamp } from '@/art/Stamp';
 import { Emblem, GuillocheG, Leather } from '@/art/patterns';
 import { fmtBR } from '@/domain/dates';
 import { C } from '@/theme';
-import { Redirect } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 
 export default function Certificado() {
   const pet = useActivePet();
@@ -24,10 +24,15 @@ export default function Certificado() {
     ...vaccines.map((v) => `${v.name}: aplicada ${fmtBR(v.lastDate!)}${v.nextDate ? `, validade ${fmtBR(v.nextDate)}` : ''}`),
   ].join('\n');
   const W = width - 48;
+  const share = () => {
+    const pw = useApp.getState().paywallFor('compartilhar');
+    if (pw) { router.push(`/planos?gatilho=${pw}` as never); return; }
+    Share.share({ message: summary }).catch(() => {});
+  };
 
   return (
     <Page seed={24} header={<PageHeader title="Certificado de vacinação" eyebrow="CARTEIRINHA DIGITAL" />}
-      footer={<Button label="Compartilhar certificado" icon="share" variant="secondary" onPress={() => Share.share({ message: summary }).catch(() => {})} />}>
+      footer={<Button label="Compartilhar certificado" icon="share" variant="secondary" onPress={share} />}>
       <View style={{ backgroundColor: C.yellowCard, borderWidth: 2, borderColor: C.yellowLine, borderRadius: 12, padding: 14, overflow: 'hidden' }}>
         <Svg width={W} height={90} style={{ position: 'absolute' }} pointerEvents="none"><GuillocheG w={W} y0={0} band={90} n={10} seed={77} color="#B08A2A" opacity={0.2} /></Svg>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>

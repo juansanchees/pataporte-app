@@ -29,7 +29,7 @@ export default function Dossie() {
   const pet = useActivePet();
   const data = useApp((s) => s.data);
   const profile = useApp((s) => s.profile);
-  const plan = profile?.plan ?? 'economica';
+  const plan = useApp((s) => s.plan());
   const [period, setPeriod] = useState('6 meses');
   const [o, setO] = useState<Omit<DossieOptions, 'months'>>({ cares: true, weight: true, health: true, diary: true, chat: false });
   const [show, setShow] = useState(false);
@@ -42,8 +42,10 @@ export default function Dossie() {
   const sinceDay = since.toISOString().slice(0, 10);
   const g = gramsPerMeal(pet);
 
+  /** PDF/compartilhar bloqueado na Econômica → paywall "compartilhar" */
+  const openPaywall = () => router.push(`/planos?gatilho=${useApp.getState().paywallFor('compartilhar') ?? 'compartilhar'}` as never);
   const gen = async () => {
-    if (!pdf) return router.push('/planos');
+    if (!pdf) return openPaywall();
     setBusy(true);
     try { await shareDossie(dossieHtml(pet, data, { ...o, months }, profile?.name ?? ''), pet.name); } catch { useApp.getState().showToast('Não foi possível gerar o PDF.'); }
     setBusy(false);
@@ -80,7 +82,7 @@ export default function Dossie() {
               const locked = x.k === 'chat' && !pdf;
               const on = o[x.k];
               return (
-                <Pressable key={x.k} accessibilityRole="checkbox" accessibilityState={{ checked: on, disabled: locked }} onPress={() => (locked ? router.push('/planos') : setO({ ...o, [x.k]: !on }))}
+                <Pressable key={x.k} accessibilityRole="checkbox" accessibilityState={{ checked: on, disabled: locked }} onPress={() => (locked ? openPaywall() : setO({ ...o, [x.k]: !on }))}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, borderTopWidth: i ? 1 : 0, borderStyle: 'dashed', borderColor: C.line }}>
                   <Icon name={x.icon} size={22} color={locked ? C.inkFaint : C.cover} />
                   <View style={{ flex: 1 }}>

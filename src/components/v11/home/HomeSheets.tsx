@@ -31,8 +31,11 @@ export function BottomSheet({ visible, onClose, children, title }: { visible: bo
   );
 }
 
-/** "Quanto tempo durou o passeio?" antes de marcar o passeio. */
-export function WalkSheet({ visible, petName, onPick, onClose }: { visible: boolean; petName: string; onPick: (minutes: string) => void; onClose: () => void }) {
+/**
+ * "Quanto tempo durou o passeio?" antes de marcar o passeio. Com `onReminder` (passeio extra, sem nada
+ * agendado agora) mostra também o atalho "Criar lembrete de passeio".
+ */
+export function WalkSheet({ visible, petName, onPick, onClose, onReminder }: { visible: boolean; petName: string; onPick: (minutes: string) => void; onClose: () => void; onReminder?: () => void }) {
   const opts = ['15 min', '30 min', '1 hora', 'Mais de 1 hora'];
   return (
     <BottomSheet visible={visible} onClose={onClose} title={`Quanto tempo durou o passeio ${petName}?`}>
@@ -45,6 +48,13 @@ export function WalkSheet({ visible, petName, onPick, onClose }: { visible: bool
           </Pressable>
         ))}
       </View>
+      {onReminder ? (
+        <Pressable accessibilityRole="button" onPress={onReminder}
+          style={({ pressed }) => ({ minHeight: 52, borderRadius: 26, borderWidth: 2, borderColor: C.cover, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: pressed ? 0.8 : 1 })}>
+          <Icon name="bell" size={20} color={C.cover} />
+          <T v="xbold" style={{ fontSize: 17, color: C.cover }}>Criar lembrete de passeio</T>
+        </Pressable>
+      ) : null}
     </BottomSheet>
   );
 }

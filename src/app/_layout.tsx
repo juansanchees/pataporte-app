@@ -14,6 +14,7 @@ import { configureNotifications, registerNotificationHandler, type NotificationA
 import { identify, track } from '@/services/analytics';
 import { StampBurst, StampDateSheet, Toast } from '@/components/overlays';
 import { IntroRevealHost } from '@/components/v11/home/IntroReveal';
+import { PendingPaywallHost } from '@/components/v11/premium/PendingPaywall';
 import { doseRoute } from '@/components/v11/home/routes';
 import { C } from '@/theme';
 
@@ -80,11 +81,16 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.paper }, animation: 'slide_from_right' }}>
         <Stack.Screen name="index" options={{ animation: 'fade' }} />
         <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
-        <Stack.Screen name="planos" options={{ presentation: 'modal' }} />
+        {/* folhas que sobem de baixo com fundo escurecido: a tela de trás continua visível */}
+        <Stack.Screen name="planos" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom', contentStyle: { backgroundColor: 'transparent' } }} />
+        <Stack.Screen name="planos-comparar" options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="lembrete/novo" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom', contentStyle: { backgroundColor: 'transparent' } }} />
+        <Stack.Screen name="lembrete/dose" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom', contentStyle: { backgroundColor: 'transparent' } }} />
         <Stack.Screen name="passaportes" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
         <Stack.Screen name="emitido" options={{ animation: 'fade', gestureEnabled: false }} />
       </Stack>
       <IntroRevealHost />
+      <PendingPaywallHost />
       <StampDateSheet />
       <StampBurst />
       <Toast />

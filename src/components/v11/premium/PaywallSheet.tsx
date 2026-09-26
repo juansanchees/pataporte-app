@@ -36,11 +36,11 @@ function copyFor(kind: Kind, pet: { name: string; sex?: 'M' | 'F' } | null): { i
   }
 }
 
-export function PaywallSheet({ kind }: { kind: Kind }) {
+export function PaywallSheet({ kind, from }: { kind: Kind; from?: string }) {
   const pet = useActivePet();
   const trialUsed = useApp((s) => !!s.profile?.planState?.trialEndsAt);
   const insets = useSafeAreaInsets();
-  const { prices, busy, buy, restoreNow, close } = usePaywall(kind);
+  const { prices, busy, buy, restoreNow, close } = usePaywall(kind, { from });
   const c = copyFor(kind, pet);
   return (
     <Scrim onClose={close}>

@@ -5,7 +5,7 @@ import { PaywallSheet } from '@/components/v11/premium/PaywallSheet';
 import { parseGatilho } from '@/components/v11/premium/usePaywall';
 
 /**
- * Primeira Classe (spec §6). /planos?gatilho=primeira_vacina|ia_4a_pergunta|ia_foto|segundo_pet|compartilhar|grafico_peso
+ * Primeira Classe (spec §6). /planos?gatilho=primeira_vacina|ia_4a_pergunta|ia_foto|segundo_pet|compartilhar|grafico_peso[&from=emissao]
  * - sem gatilho ou primeira_vacina → paywall principal (mockup Paywall-Primeira)
  * - outros → folha curta do contexto (Paywall-IA, -Foto, -Pet, -Compartilhar)
  *
@@ -14,8 +14,8 @@ import { parseGatilho } from '@/components/v11/premium/usePaywall';
  * sozinha em produção; a própria tela mostra uma faixa "Pré-visualização" (DevNote) enquanto o flag estiver off.
  */
 export default function Planos() {
-  const { gatilho } = useLocalSearchParams<{ gatilho?: string }>();
+  const { gatilho, from } = useLocalSearchParams<{ gatilho?: string; from?: string }>();
   const g = parseGatilho(gatilho);
-  if (!g || g === 'primeira_vacina') return <PaywallMain gatilho={g} />;
-  return <PaywallSheet kind={g} />;
+  if (!g || g === 'primeira_vacina') return <PaywallMain gatilho={g} from={from} />;
+  return <PaywallSheet kind={g} from={from} />;
 }

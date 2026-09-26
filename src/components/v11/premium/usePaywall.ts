@@ -3,14 +3,13 @@ import { router } from 'expo-router';
 import { useApp } from '@/store/app';
 import { PRICES } from '@/domain/commerce';
 import type { PaywallTriggerId } from '@/domain/types';
-import { getOfferings, purchase, restore, type Offerings, type PurchasePlan } from '@/services/purchases';
+import { getOfferings, purchase, purchasesMode, restore, type Offerings, type PurchasePlan } from '@/services/purchases';
 import { track } from '@/services/analytics';
 import { goBack } from './common';
 
-/** Gatilhos aceitos em /planos?gatilho=… (grafico_peso ainda não é um PaywallTriggerId da store). */
-export type Gatilho = PaywallTriggerId | 'grafico_peso';
-const STORE_TRIGGERS: PaywallTriggerId[] = ['primeira_vacina', 'ia_4a_pergunta', 'ia_foto', 'segundo_pet', 'compartilhar'];
-export const GATILHOS: Gatilho[] = [...STORE_TRIGGERS, 'grafico_peso'];
+/** Gatilhos aceitos em /planos?gatilho=… */
+export type Gatilho = PaywallTriggerId;
+export const GATILHOS: Gatilho[] = ['primeira_vacina', 'ia_4a_pergunta', 'ia_foto', 'segundo_pet', 'compartilhar', 'grafico_peso'];
 
 export function parseGatilho(v: unknown): Gatilho | null {
   const s = Array.isArray(v) ? v[0] : v;
@@ -21,10 +20,11 @@ const FALLBACK: Offerings = { annual: { priceString: PRICES.yearlyLabel }, month
 
 /**
  * Tudo que o paywall faz: preços (RevenueCat com fallback), compra, restaurar, fechar e métricas.
- * Compra ok → teste grátis (startTrial) quando a loja devolve período de teste e a conta ainda não usou o teste;
- * senão setPlan('primeira'). Ver PEDIDOS: a store ainda não tem uma ação "compra da loja" (source 'loja').
+ * Loja de verdade → applyStorePurchase (planState.source 'loja' + validade da loja).
+ * Modo simulado → teste grátis (startTrial) se a conta ainda não usou o teste; senão setPlan('primeira').
+ * `from: 'emissao'` (paywall da 1ª vacina logo depois de emitir): fechar vai para a Home, nunca volta ao cadastro.
  */
-export function usePaywall(gatilho: Gatilho | null, opts?: { silent?: boolean }) {
+export function usePaywall(gatilho: Gatilho | null, opts?: { silent?: boolean; from?: string }) {
   const [prices, setPrices] = useState<Offerings>(FALLBACK);
   const [busy, setBusy] = useState<null | 'buy' | 'restore'>(null);
   const done = useRef(false);
@@ -35,15 +35,17 @@ export function usePaywall(gatilho: Gatilho | null, opts?: { silent?: boolean })
     getOfferings().then((o) => { if (alive) setPrices(o); }).catch(() => {});
     if (opts?.silent) return () => { alive = false; };
     track('paywall_visto', { gatilho: tag });
-    if (gatilho && (STORE_TRIGGERS as string[]).includes(gatilho)) {
-      useApp.getState().markPaywallSeen(gatilho as PaywallTriggerId).catch(() => {});
-    }
+    if (gatilho) useApp.getState().markPaywallSeen(gatilho).catch(() => {});
     return () => { alive = false; };
   }, [gatilho, tag]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const leave = () => {
+    if (opts?.from === 'emissao') router.dismissTo('/inicio');
+    else goBack();
+  };
   const close = () => {
     if (!done.current) track('paywall_fechado', { gatilho: tag });
-    goBack();
+    leave();
   };
 
   const buy = async (period: PurchasePlan = 'annual') => {
@@ -55,6 +57,13 @@ export function usePaywall(gatilho: Gatilho | null, opts?: { silent?: boolean })
       const r = await purchase(period);
       if (!r.ok) return; // cancelou na loja
       done.current = true;
+      if (purchasesMode() === 'real') {
+        await st.applyStorePurchase({ isTrial: r.isTrial, expiresAt: r.expiresAt, period: periodo });
+        track(r.isTrial ? 'trial_iniciado' : 'assinatura', { gatilho: tag, periodo });
+        st.showToast(r.isTrial ? 'Pronto! Primeira Classe liberada: 7 dias grátis.' : 'Bem-vindo à Primeira Classe!');
+        leave();
+        return;
+      }
       const trialUsed = !!useApp.getState().profile?.planState?.trialEndsAt;
       if (r.isTrial && !trialUsed) {
         await st.startTrial(periodo);
@@ -65,7 +74,7 @@ export function usePaywall(gatilho: Gatilho | null, opts?: { silent?: boolean })
         track('assinatura', { gatilho: tag, periodo });
         st.showToast('Bem-vindo à Primeira Classe!');
       }
-      goBack();
+      leave();
     } catch {
       st.showToast('Não foi possível concluir agora. Verifique a internet e tente de novo.');
     } finally {
@@ -82,9 +91,10 @@ export function usePaywall(gatilho: Gatilho | null, opts?: { silent?: boolean })
       track('restaurar_compra', { gatilho: tag, ok: r.ok });
       if (r.ok) {
         done.current = true;
-        await st.setPlan('primeira');
+        if (purchasesMode() === 'real') await st.applyStorePurchase({ isTrial: r.isTrial, expiresAt: r.expiresAt });
+        else await st.setPlan('primeira');
         st.showToast('Compra restaurada. Boa viagem na Primeira Classe!');
-        goBack();
+        leave();
       } else {
         st.showToast('Não encontramos uma compra nesta conta da loja.');
       }

@@ -28,7 +28,7 @@ export default function LembreteNovo() {
   }, [valid, tipo]);
 
   if (!pet) return <Redirect href="/" />;
-  if (valid) return <View style={{ flex: 1, backgroundColor: C.paper }} />;
+  if (valid) return <View style={{ flex: 1 }} />;
 
   return (
     <BottomCard>

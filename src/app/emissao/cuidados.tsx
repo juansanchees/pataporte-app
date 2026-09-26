@@ -11,6 +11,7 @@ import { useCadastro } from '@/components/v11/cadastro/session';
 import { finishChapter, petRef } from '@/components/v11/cadastro/flow';
 import { FOOD_OPTIONS, foodChoice, mealTimesFor } from '@/domain/catalog';
 import type { HistoryWhen } from '@/domain/itinerary';
+import type { TeethCare } from '@/domain/types';
 import { C, F } from '@/theme';
 
 type Q = 'checkup' | 'dentes' | 'comida' | 'refeicoes' | 'horarios' | 'racao' | 'alergia' | 'doenca' | 'remedio';
@@ -23,10 +24,10 @@ const CHECKUP: { k: string; label: string; when?: HistoryWhen; answer: 'tomei' |
   { k: 'nunca', label: 'Nunca levei', answer: 'nao' },
 ];
 
-const TEETH = [
-  { k: 'semana', label: 'Sim, toda semana' },
-  { k: 'asvezes', label: 'Às vezes' },
-  { k: 'nunca', label: 'Nunca escovei' },
+const TEETH: { k: string; label: string; care: TeethCare }[] = [
+  { k: 'semana', label: 'Sim, toda semana', care: 'escova' },
+  { k: 'asvezes', label: 'Às vezes', care: 'as_vezes' },
+  { k: 'nunca', label: 'Nunca escovei', care: 'nao' },
 ];
 
 const FOOD_ICON: Record<(typeof FOOD_OPTIONS)[number], IconName> = { Ração: 'bowl', 'Comida caseira': 'heart', 'Os dois': 'sparkle' };
@@ -89,8 +90,8 @@ export default function Cuidados() {
       <ChapterFrame cap={5} onNext={next} disabled={!v}>
         {head('tooth', `Você escova os dentes ${ref.do}?`)}
         <View style={{ gap: 8 }} accessibilityRole="radiogroup">
-          {TEETH.map((o) => <RadioOption key={o.k} label={o.label} on={v === o.k} onPress={() => answer('c:dentes', o.k)} />)}
-          <RadioOption label="Não sei" on={v === 'naosei'} onPress={() => answer('c:dentes', 'naosei')} />
+          {TEETH.map((o) => <RadioOption key={o.k} label={o.label} on={v === o.k} onPress={() => { answer('c:dentes', o.k); setDraft({ teethCare: o.care }); }} />)}
+          <RadioOption label="Não sei" on={v === 'naosei'} onPress={() => { answer('c:dentes', 'naosei'); setDraft({ teethCare: 'nao_sei' }); }} />
         </View>
         {v && v !== 'semana' ? (
           <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start', backgroundColor: C.goldPale, borderRadius: 14, padding: 12 }}>

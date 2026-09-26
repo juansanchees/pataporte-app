@@ -1,4 +1,3 @@
-import { careWords } from '@/domain/catalog';
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -8,9 +7,11 @@ import { Button, SectionTitle, T } from '@/components/ui';
 import { CircleStamp } from '@/art/Stamp';
 import { Icon } from '@/art/Icon';
 import { DurationSheet } from '@/components/v11/lembrete/DurationSheet';
-import { aboutCare, CATEGORY_LABEL } from '@/domain/catalog';
+import { BottomSheet } from '@/components/v11/home/HomeSheets';
+import { DateBoxes } from '@/components/v11/cadastro/Options';
+import { aboutCare, careWords, CATEGORY_LABEL } from '@/domain/catalog';
 import { careStatus, historyOf, projected, recurrenceLabel } from '@/domain/itinerary';
-import { diffDays, fmtBR, today } from '@/domain/dates';
+import { diffDays, fmtBR, parseBR, today } from '@/domain/dates';
 import { durationLabel, type ParasiteKind } from '@/domain/parasites';
 import type { ParasiteDuration } from '@/domain/types';
 import { C, STATUS_UI } from '@/theme';
@@ -23,20 +24,23 @@ export default function Cuidado() {
   const hour = useApp((s) => s.profile?.notifyHour ?? 9);
   const [confirmDel, setConfirmDel] = useState(false);
   const [dose, setDose] = useState<string | null>(null);
-  const [showDuration, setShowDuration] = useState(false);
-  const [busyDuration, setBusyDuration] = useState(false);
-  const acaoHandled = useRef(false);
+  // notificações: "Já tomou" (acao=carimbar|tomou) abre o registro (com a pergunta de duração p/ vermífugo/antipulgas);
+  // "Mudar data" (acao=mudar-data|mudar) abre a troca da data da PRÓXIMA dose (não carimba).
+  // O cuidado já está na store quando a notificação navega (handleNotificationAction troca o pet antes).
+  const stampNow = acao === 'carimbar' || acao === 'tomou';
+  const changeNow = acao === 'mudar-data' || acao === 'mudar';
   const isParasite = care?.category === 'vermifugo' || care?.category === 'antiparasitario';
   const parasiteKind: ParasiteKind = care?.category === 'vermifugo' ? 'vermifugo' : 'antipulgas';
-
-  // notificações: "Já tomou" abre o registro (com a pergunta de duração p/ vermífugo/antipulgas);
-  // "Mudar data" abre o mesmo seletor de data usado para corrigir carimbos.
+  const [showDuration, setShowDuration] = useState(() => !!care && stampNow && isParasite);
+  const [busyDuration, setBusyDuration] = useState(false);
+  /** "Mudar data" (DD/MM/AAAA) da próxima dose; null = fechado */
+  const [newDate, setNewDate] = useState<string | null>(() => (care && changeNow ? (care.nextDate ? fmtBR(care.nextDate) : '') : null));
+  const acaoHandled = useRef(false);
   useEffect(() => {
-    if (!care || acaoHandled.current || !acao) return;
+    if (!care || acaoHandled.current || !stampNow || isParasite) return;
     acaoHandled.current = true;
-    if (acao === 'carimbar' || acao === 'tomou') { if (isParasite) setShowDuration(true); else useApp.getState().askStamp(care.id); }
-    else if (acao === 'mudar-data' || acao === 'mudar') useApp.getState().askStamp(care.id);
-  }, [care, acao, isParasite]);
+    useApp.getState().askStamp(care.id);
+  }, [care, stampNow, isParasite]);
 
   if (!pet || !care) return <Page header={<PageHeader title="Cuidado" />}><T>Esse cuidado não existe mais.</T></Page>;
 
@@ -47,6 +51,13 @@ export default function Cuidado() {
     setBusyDuration(false);
     setShowDuration(false);
     if (r) useApp.getState().showToast(`Registrado! ${durationLabel(r.months)} · próximo ${r.label}.`);
+  };
+  const saveNewDate = async () => {
+    const day = parseBR(newDate ?? '');
+    if (!day) { useApp.getState().showToast('Confira a data: dia, mês e ano.'); return; }
+    if (diffDays(t, day) < 0) { useApp.getState().showToast('Escolha hoje ou uma data futura. Se já tomou, use "Já tomou".'); return; }
+    await useApp.getState().setCareNextDate(care.id, day);
+    setNewDate(null);
   };
   const st = careStatus(care, t);
   const ui = STATUS_UI[st];
@@ -105,6 +116,7 @@ export default function Cuidado() {
           </View>
         ) : null}
 
+        {care.nextDate && st !== 'carimbado' ? <Button label="Mudar a data da próxima dose" icon="calendar" variant="secondary" onPress={() => setNewDate(fmtBR(care.nextDate!))} /> : null}
         <Button label="Registrar uma dose antiga" icon="calendar" variant="secondary" onPress={() => useApp.getState().askStamp(care.id)} />
         {confirmDel ? (
           <View style={{ gap: 8 }}>
@@ -118,6 +130,11 @@ export default function Cuidado() {
           <Button label="Remover do itinerário" variant="ghost" onPress={() => setConfirmDel(true)} />
         )}
       </View>
+      <BottomSheet visible={newDate !== null} onClose={() => setNewDate(null)} title="Nova data">
+        <T style={{ fontSize: 16, color: C.inkSoft }}>{`Quando vai ser ${care.name}? Vamos avisar antes.`}</T>
+        <DateBoxes value={newDate ?? ''} onChange={setNewDate} />
+        <Button label="Salvar nova data" icon="check" onPress={saveNewDate} />
+      </BottomSheet>
       <Modal visible={showDuration} transparent animationType="slide" onRequestClose={() => setShowDuration(false)}>
         <DurationSheet title="Quanto tempo ele protege?" busy={busyDuration} onConfirm={confirmDuration} onClose={() => setShowDuration(false)} />
       </Modal>
