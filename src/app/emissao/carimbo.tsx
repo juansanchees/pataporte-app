@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -28,8 +28,8 @@ export default function Carimbo() {
   const emit = useApp((s) => s.emitPassport);
   const answered = useCadastro((s) => s.answered);
   const [busy, setBusy] = useState(false);
-  const drop = useRef(new Animated.Value(0)).current;
-  const ring = useRef(new Animated.Value(0)).current;
+  const drop = useState(() => new Animated.Value(0))[0];
+  const ring = useState(() => new Animated.Value(0))[0];
   const t = today();
   const ref = petRef(d);
   const name = d.name.trim() || 'Seu pet';

@@ -92,7 +92,7 @@ export function DateBoxes({ value, onChange, height = 56, labels = true }: { val
 /** Campo do nome: quando a pessoa termina, o nome ganha um carimbo "NOME REGISTRADO" (animação). */
 export function NameField({ value, onChange, onDone }: { value: string; onChange: (v: string) => void; onDone?: () => void }) {
   const [editing, setEditing] = useState(!value.trim());
-  const stamp = useRef(new Animated.Value(value.trim() ? 1 : 0)).current;
+  const stamp = useState(() => new Animated.Value(value.trim() ? 1 : 0))[0];
   const inputRef = useRef<TextInput>(null);
 
   const finish = () => {

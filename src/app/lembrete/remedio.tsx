@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, TextInput, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { useActivePet, useApp } from '@/store/app';
 import { Page, PageHeader } from '@/components/passport';
 import { Button, ChipRow, Field, FieldLabel, InfoNote, MilesChip, T } from '@/components/ui';
 import { LembreteIcon } from '@/art/icons-lembrete';
-import { DAYS_OPTIONS, FREQUENCY_OPTIONS, doseTimes, hasNightDose, shiftMinutes, suggestShift, summary as medSummary } from '@/domain/meds';
+import { DAYS_OPTIONS, FREQUENCY_OPTIONS, doseTimes, hasNightDose, suggestShift, summary as medSummary } from '@/domain/meds';
 import { today } from '@/domain/dates';
 import { PAID_PLANS } from '@/domain/commerce';
 import { track } from '@/services/analytics';
@@ -31,7 +31,7 @@ export default function LembreteRemedio() {
 
   const isOutro = freq === 'Outro';
   const option = FREQUENCY_OPTIONS.find((f) => f.label === freq);
-  const rawTimes = useMemo(() => (isOutro ? [...customTimes].filter((t) => /^\d{2}:\d{2}$/.test(t)).sort() : doseTimes(option?.everyHours ?? 24, firstDose)), [isOutro, customTimes, option, firstDose]);
+  const rawTimes = isOutro ? [...customTimes].filter((t) => /^\d{2}:\d{2}$/.test(t)).sort() : doseTimes(option?.everyHours ?? 24, firstDose);
   const night = hasNightDose(rawTimes);
   const shifted = night ? suggestShift(rawTimes) : null;
   const times = night && nightChoice === 'shift' && shifted ? shifted : rawTimes;

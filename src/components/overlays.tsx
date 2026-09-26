@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, KeyboardAvoidingView, Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/app';
@@ -13,7 +13,7 @@ import { art } from '@/domain/words';
 export function Toast() {
   const toast = useApp((s) => s.toast);
   const insets = useSafeAreaInsets();
-  const y = useRef(new Animated.Value(40)).current;
+  const y = useState(() => new Animated.Value(40))[0];
   useEffect(() => {
     if (toast) {
       AccessibilityInfo.announceForAccessibility(toast);
@@ -35,9 +35,9 @@ export function Toast() {
 export function StampBurst() {
   const fx = useApp((s) => s.stampFx);
   const clear = useApp((s) => s.clearStampFx);
-  const scale = useRef(new Animated.Value(2.2)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const shake = useRef(new Animated.Value(0)).current;
+  const scale = useState(() => new Animated.Value(2.2))[0];
+  const opacity = useState(() => new Animated.Value(0))[0];
+  const shake = useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     if (!fx) return;
@@ -95,7 +95,12 @@ export function StampDateSheet() {
   const [other, setOther] = useState('');
   const [place, setPlace] = useState('');
   const [busy, setBusy] = useState(false);
-  useEffect(() => { if (careId) { setMode('hoje'); setOther(''); setPlace(care?.place ?? ''); setBusy(false); } }, [careId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // nova folha (outro cuidado): volta ao estado inicial — ajuste durante o render, sem efeito
+  const [openFor, setOpenFor] = useState<string | null>(null);
+  if (careId !== openFor) {
+    setOpenFor(careId);
+    if (careId) { setMode('hoje'); setOther(''); setPlace(care?.place ?? ''); setBusy(false); }
+  }
   if (!careId || !care) return null;
   const day = mode === 'hoje' ? t : mode === 'ontem' ? addDays(t, -1) : parseBR(other);
   const valid = !!day && day <= t;

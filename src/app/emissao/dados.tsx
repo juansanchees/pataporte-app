@@ -31,7 +31,7 @@ function DateBoxes({ value, onChange }: { value: string; onChange: (v: string) =
 /** Campo livre para o nome. Quando a pessoa termina, o nome ganha um carimbo de passaporte. */
 function NameField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [editing, setEditing] = useState(!value.trim());
-  const stamp = useRef(new Animated.Value(value.trim() ? 1 : 0)).current;
+  const stamp = useState(() => new Animated.Value(value.trim() ? 1 : 0))[0];
   const inputRef = useRef<TextInput>(null);
 
   const finish = () => {

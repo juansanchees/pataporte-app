@@ -71,7 +71,6 @@ export function tripChecklist(trip: Trip, pet: Pet, cares: Care[], today: string
   const manual = (key: string, title: string, why: string, extra: Partial<TripReq> = {}): TripReq => ({
     key, title, why, manual: true, state: done(key) ? 'ok' : 'falta', ...extra,
   });
-  const daysLeft = diffDays(today, d);
 
   // ------------------------------------------------------------ antirrábica (todos os destinos)
   const arbReq = (minDaysBefore: number): TripReq => {

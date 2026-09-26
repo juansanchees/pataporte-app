@@ -9,7 +9,6 @@ import { Page } from '@/components/passport';
 import { Button, Field, InfoNote, T } from '@/components/ui';
 import { Emblem, Leather } from '@/art/patterns';
 import { C, F } from '@/theme';
-import { Icon } from '@/art/Icon';
 
 /** "G" colorido do Google (marca oficial, usada no botão de login como pede o guia do Google). */
 function GoogleG({ size = 22 }: { size?: number }) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Animated, Easing, Image, Pressable, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,7 +26,7 @@ export default function CarteirinhaFoto() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [uri, setUri] = useState('');
   const [err, setErr] = useState('');
-  const scan = useRef(new Animated.Value(0)).current;
+  const scan = useState(() => new Animated.Value(0))[0];
   const fw = Math.min(322, width - 68);
   const fh = Math.min(Math.round(fw * 1.34), Math.round(height * 0.5));
 

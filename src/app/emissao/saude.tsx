@@ -85,8 +85,9 @@ export default function Saude() {
   const usesRacao = choice !== 'Comida caseira';
 
   const next = async () => {
-    if (editing) { await useApp.getState().saveEdit(); router.back(); return; }
-    router.push('/emissao/historico');
+    // só é aberta para editar (Perfil → Saúde e alimentação); o cadastro v1.1 pergunta isso no capítulo 5
+    if (editing) await useApp.getState().saveEdit();
+    router.back();
   };
 
   let n = 0;

@@ -7,7 +7,6 @@ import { ChipRow, FieldLabel, T } from '@/components/ui';
 import { PetPhoto } from '@/components/passport';
 import { DETAIL_OPTIONS } from '@/domain/catalog';
 import type { PetDetails } from '@/domain/types';
-import { C } from '@/theme';
 
 const FIELDS: [keyof PetDetails, string][] = [
   ['manchas', 'Manchas'],

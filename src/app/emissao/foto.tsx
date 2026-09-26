@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Animated, Easing, Image, View, useWindowDimensions } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import Svg, { Ellipse, Path } from 'react-native-svg';
@@ -25,7 +25,7 @@ export default function Foto() {
   const [phase, setPhase] = useState<Phase>(d.photoUri ? (d.aiSummary ? 'done' : 'idle') : 'idle');
   const [result, setResult] = useState<PhotoAnalysis | null>(null);
   const [errMsg, setErrMsg] = useState('');
-  const scan = useRef(new Animated.Value(0)).current;
+  const scan = useState(() => new Animated.Value(0))[0];
   const editing = d.editingPetId !== null;
   // emissão nova: começa limpa (sem respostas de uma emissão anterior) e passa pelo mapa dos capítulos
   useState(() => {
