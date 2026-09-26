@@ -46,7 +46,7 @@ export default function Diario() {
               </Pressable>
             ))}
           </View>
-          <MilesChip text="+10 MILHAS POR REGISTRO" />
+          <MilesChip text="+5 MILHAS PELA FOTO DO DIA" />
         </View>
 
         {list.map((ch) => (

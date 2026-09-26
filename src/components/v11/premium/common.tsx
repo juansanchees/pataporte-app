@@ -104,7 +104,7 @@ export function CityField({ style, onSaved, compact }: { style?: StyleProp<ViewS
       <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <TextInput maxFontSizeMultiplier={MAX_SCALE} value={val} onChangeText={setVal} placeholder="Ex.: Saquarema" placeholderTextColor={C.inkFaint}
           accessibilityLabel="Sua cidade" autoCapitalize="words" autoCorrect={false} returnKeyType="done" onSubmitEditing={save} maxLength={40}
-          style={{ flex: 1, minHeight: 52, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: C.inkFaint, borderRadius: 12, paddingHorizontal: 14, fontFamily: F.bodyBold, fontSize: 17, color: C.ink }} />
+          style={{ flex: 1, minWidth: 0, minHeight: 52, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: C.inkFaint, borderRadius: 12, paddingHorizontal: 14, fontFamily: F.bodyBold, fontSize: 17, color: C.ink }} />
         <Pressable accessibilityRole="button" accessibilityLabel="Salvar cidade" accessibilityState={{ disabled: !dirty || busy }} onPress={save}
           style={({ pressed }) => ({ minHeight: 52, minWidth: 88, borderRadius: 12, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: dirty ? C.cover : C.paper3, opacity: pressed ? 0.85 : 1 })}>
           <T v="xbold" style={{ fontSize: 16, color: dirty ? C.goldPale : C.inkSoft }}>{busy ? '…' : saved && !dirty ? 'Salva' : 'Salvar'}</T>

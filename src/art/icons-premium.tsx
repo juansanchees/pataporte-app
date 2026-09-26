@@ -63,10 +63,10 @@ export function PawSolid({ size = 22, color = '#1D4A52' }: { size?: number; colo
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100">
       <G fill={color}>
-        <Ellipse cx={19} cy={44} rx={9.5} ry={12.5} rotation={-28} origin="19, 44" />
-        <Ellipse cx={38} cy={23} rx={10.5} ry={13.5} rotation={-9} origin="38, 23" />
-        <Ellipse cx={62} cy={23} rx={10.5} ry={13.5} rotation={9} origin="62, 23" />
-        <Ellipse cx={81} cy={44} rx={9.5} ry={12.5} rotation={28} origin="81, 44" />
+        <Ellipse cx={19} cy={44} rx={9.5} ry={12.5} transform="rotate(-28 19 44)" />
+        <Ellipse cx={38} cy={23} rx={10.5} ry={13.5} transform="rotate(-9 38 23)" />
+        <Ellipse cx={62} cy={23} rx={10.5} ry={13.5} transform="rotate(9 62 23)" />
+        <Ellipse cx={81} cy={44} rx={9.5} ry={12.5} transform="rotate(28 81 44)" />
         <Path d="M50 47 C61 47 69 56 75 64 C83 74 81 89 68 89 C60 89 56 85 50 85 C44 85 40 89 32 89 C19 89 17 74 25 64 C31 56 39 47 50 47 Z" />
       </G>
     </Svg>

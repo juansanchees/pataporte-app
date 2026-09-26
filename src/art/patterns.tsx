@@ -115,10 +115,10 @@ export function starPath(cx: number, cy: number, ro: number, ri: number, points 
 export function PawG({ cx, cy, s, fill }: { cx: number; cy: number; s: number; fill: string }) {
   return (
     <G>
-      <Ellipse cx={cx - 9 * s} cy={cy - 6 * s} rx={3.4 * s} ry={4.4 * s} fill={fill} rotation={-18} origin={`${cx - 9 * s}, ${cy - 6 * s}`} />
+      <Ellipse cx={cx - 9 * s} cy={cy - 6 * s} rx={3.4 * s} ry={4.4 * s} fill={fill} transform={`rotate(${-18} ${cx - 9 * s} ${cy - 6 * s})`} />
       <Ellipse cx={cx - 3.2 * s} cy={cy - 11 * s} rx={3.4 * s} ry={4.6 * s} fill={fill} />
       <Ellipse cx={cx + 3.2 * s} cy={cy - 11 * s} rx={3.4 * s} ry={4.6 * s} fill={fill} />
-      <Ellipse cx={cx + 9 * s} cy={cy - 6 * s} rx={3.4 * s} ry={4.4 * s} fill={fill} rotation={18} origin={`${cx + 9 * s}, ${cy - 6 * s}`} />
+      <Ellipse cx={cx + 9 * s} cy={cy - 6 * s} rx={3.4 * s} ry={4.4 * s} fill={fill} transform={`rotate(${18} ${cx + 9 * s} ${cy - 6 * s})`} />
       <Path
         d={`M${cx} ${cy - 3 * s} C${cx - 8 * s} ${cy - 3 * s} ${cx - 11 * s} ${cy + 5 * s} ${cx - 7 * s} ${cy + 8 * s} C${cx - 4 * s} ${cy + 10 * s} ${cx - 1.5 * s} ${cy + 8 * s} ${cx} ${cy + 8 * s} C${cx + 1.5 * s} ${cy + 8 * s} ${cx + 4 * s} ${cy + 10 * s} ${cx + 7 * s} ${cy + 8 * s} C${cx + 11 * s} ${cy + 5 * s} ${cx + 8 * s} ${cy - 3 * s} ${cx} ${cy - 3 * s} Z`}
         fill={fill}
@@ -136,7 +136,7 @@ export function Emblem({ size = 160, color = C.goldLight, bg = C.cover }: { size
       const x = c + 70 * Math.cos(ang);
       const y = c + 70 * Math.sin(ang);
       const rot = (ang * 180) / Math.PI + (side === -1 ? 90 : -90) + side * 25;
-      leaves.push(<Ellipse key={`${side}${i}`} cx={x} cy={y} rx={4.2} ry={9} fill={color} rotation={rot} origin={`${x}, ${y}`} />);
+      leaves.push(<Ellipse key={`${side}${i}`} cx={x} cy={y} rx={4.2} ry={9} fill={color} transform={`rotate(${rot} ${x} ${y})`} />);
     }
   }
   const lat = [-26, 0, 26].map((dy) => {

@@ -56,7 +56,7 @@ export function DevNote() {
   // NOTA DE DESENVOLVIMENTO: com PAID_PLANS = false a cobrança está desligada e os gatilhos (paywallTrigger) retornam
   // null — esta tela só abre para pré-visualizar/testar. As compras usam o modo simulado de services/purchases.
   return (
-    <View style={{ backgroundColor: C.amberPale, borderRadius: 12, padding: 10, marginTop: 10 }}>
+    <View style={{ backgroundColor: C.amberPale, borderRadius: 12, padding: 10, marginTop: 10, marginRight: 52 }}>
       <T v="bold" style={{ fontSize: 15, color: C.amber, textAlign: 'center' }}>Pré-visualização: a cobrança está desligada (PAID_PLANS = false). Nada é cobrado.</T>
     </View>
   );
@@ -153,10 +153,10 @@ export function PaywallMain({ gatilho, from }: { gatilho: Gatilho | null; from?:
               <Radio on={sel === 'economica'} muted />
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-                  <T v="serif" numberOfLines={1} style={{ fontSize: 18, lineHeight: 22, color: C.cover, flexShrink: 1 }}>Econômica · grátis</T>
+                  <T v="serif" numberOfLines={1} style={{ fontSize: 18, lineHeight: 22, color: C.cover, flexShrink: 1 }}>Econômica</T>
                   <T v="monoBold" style={{ fontSize: 12, color: C.inkSoft }}>32C</T>
                 </View>
-                <T v="bold" numberOfLines={1} style={{ fontSize: 15, color: C.inkSoft }}>1 pet, 3 perguntas por mês</T>
+                <T v="bold" numberOfLines={2} style={{ fontSize: 15, lineHeight: 19, color: C.inkSoft }}>Grátis · 1 pet, 3 perguntas por mês</T>
               </View>
             </Pressable>
             <View style={{ height: 38, borderLeftWidth: 2, borderStyle: 'dashed', borderColor: C.line }} />

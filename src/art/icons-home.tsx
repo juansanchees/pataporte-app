@@ -12,7 +12,7 @@ const P = {
   guide: <><Path d="M12 3 C12.8 8 14 9.2 19 10 C14 10.8 12.8 12 12 17 C11.2 12 10 10.8 5 10 C10 9.2 11.2 8 12 3 Z" /><Path d="M18 15.5 C18.3 17.4 18.8 17.9 20.5 18.2 C18.8 18.5 18.3 19 18 20.8 C17.7 19 17.2 18.5 15.5 18.2 C17.2 17.9 17.7 17.4 18 15.5 Z" /></>,
   bell: <><Path d="M6 16 V11 A6 6 0 0 1 18 11 V16 L19.5 18 H4.5 Z" /><Path d="M10 21 A2 2 0 0 0 14 21" /></>,
   syringe: <Path d="M18 2 L22 6 M20 4 L16.5 7.5 M17.5 8.5 L8 18 L5 19 L6 16 L15.5 6.5 Z M13 9 L15 11 M10.5 11.5 L12.5 13.5 M5.5 18.5 L2 22" />,
-  pill: <><Rect x={3} y={9} width={18} height={7} rx={3.5} rotation={-45} origin="12, 12.5" /><Line x1={9.5} y1={8.5} x2={14.5} y2={13.5} /></>,
+  pill: <><Rect x={3} y={9} width={18} height={7} rx={3.5} transform="rotate(-45 12 12.5)" /><Line x1={9.5} y1={8.5} x2={14.5} y2={13.5} /></>,
   walk: <><Circle cx={8} cy={4.5} r={2} /><Path d="M8 8 L7 14 L4 20 M7 14 L10 17 L11 21 M8 10 L11 12 L14 11 M14 11 C17 11 19 13 19 16" /><Circle cx={19.5} cy={18} r={1.6} /></>,
   scale: <><Rect x={3} y={4} width={18} height={16} rx={4} /><Path d="M7.5 10 A5 5 0 0 1 16.5 10" /><Line x1={12} y1={10.5} x2={13.8} y2={7.8} /></>,
   bowl: <><Path d="M3 12 H21 C21 16.5 17 19.5 12 19.5 C7 19.5 3 16.5 3 12 Z" /><Path d="M8 9 C8 7.5 9 7 9 5.5 M12 9 C12 7.5 13 7 13 5.5 M16 9 C16 7.5 17 7 17 5.5" /></>,
@@ -64,10 +64,10 @@ export function HomeIcon({ name, size = 22, color = '#1D4A52', sw = 2 }: { name:
 export function PawFill({ size = 28, color = '#1D4A52', opacity = 1 }: { size?: number; color?: string; opacity?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100" opacity={opacity}>
-      <Ellipse cx={19} cy={44} rx={9.5} ry={12.5} fill={color} rotation={-28} origin="19, 44" />
-      <Ellipse cx={38} cy={23} rx={10.5} ry={13.5} fill={color} rotation={-9} origin="38, 23" />
-      <Ellipse cx={62} cy={23} rx={10.5} ry={13.5} fill={color} rotation={9} origin="62, 23" />
-      <Ellipse cx={81} cy={44} rx={9.5} ry={12.5} fill={color} rotation={28} origin="81, 44" />
+      <Ellipse cx={19} cy={44} rx={9.5} ry={12.5} fill={color} transform="rotate(-28 19 44)" />
+      <Ellipse cx={38} cy={23} rx={10.5} ry={13.5} fill={color} transform="rotate(-9 38 23)" />
+      <Ellipse cx={62} cy={23} rx={10.5} ry={13.5} fill={color} transform="rotate(9 62 23)" />
+      <Ellipse cx={81} cy={44} rx={9.5} ry={12.5} fill={color} transform="rotate(28 81 44)" />
       <Path d="M50 47 C61 47 69 56 75 64 C83 74 81 89 68 89 C60 89 56 85 50 85 C44 85 40 89 32 89 C19 89 17 74 25 64 C31 56 39 47 50 47 Z" fill={color} />
     </Svg>
   );

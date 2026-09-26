@@ -140,7 +140,7 @@ export default function Emergencia() {
               <Pressable accessibilityRole="button" onPress={startEdit}
                 style={({ pressed }) => ({ marginTop: 12, minHeight: 56, borderRadius: 28, backgroundColor: pressed ? C.redPale : C.white, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 12 })}>
                 <HomeIcon name="phone" size={22} color={C.red} sw={2.2} />
-                <T v="xbold" numberOfLines={1} adjustsFontSizeToFit style={{ flexShrink: 1, fontSize: 18, color: C.red }}>Cadastrar telefone do veterinário</T>
+                <T v="xbold" numberOfLines={2} style={{ flexShrink: 1, fontSize: 18, lineHeight: 23, color: C.red, textAlign: 'center' }}>Cadastrar telefone do veterinário</T>
               </Pressable>
             </>
           )}

@@ -36,10 +36,10 @@ export function Avatar({ species, coat, mood = 'feliz', size = 200, patch = fals
         </G>
       ) : (
         <G>
-          <Ellipse cx={cx - 74} cy={half ? 70 : 84} rx={32} ry={half ? 40 : 50} fill={coat} rotation={half ? -40 : -20} origin={`${cx - 74}, ${half ? 70 : 84}`} />
-          <Ellipse cx={cx + 74} cy={half ? 70 : 84} rx={32} ry={half ? 40 : 50} fill={coat} rotation={half ? 40 : 20} origin={`${cx + 74}, ${half ? 70 : 84}`} />
-          <Ellipse cx={cx - 74} cy={88} rx={17} ry={31} fill="#000" opacity={0.08} rotation={-20} origin={`${cx - 74}, 88`} />
-          <Ellipse cx={cx + 74} cy={88} rx={17} ry={31} fill="#000" opacity={0.08} rotation={20} origin={`${cx + 74}, 88`} />
+          <Ellipse cx={cx - 74} cy={half ? 70 : 84} rx={32} ry={half ? 40 : 50} fill={coat} transform={`rotate(${half ? -40 : -20} ${cx - 74} ${half ? 70 : 84})`} />
+          <Ellipse cx={cx + 74} cy={half ? 70 : 84} rx={32} ry={half ? 40 : 50} fill={coat} transform={`rotate(${half ? 40 : 20} ${cx + 74} ${half ? 70 : 84})`} />
+          <Ellipse cx={cx - 74} cy={88} rx={17} ry={31} fill="#000" opacity={0.08} transform={`rotate(${-20} ${cx - 74} 88)`} />
+          <Ellipse cx={cx + 74} cy={88} rx={17} ry={31} fill="#000" opacity={0.08} transform={`rotate(${20} ${cx + 74} 88)`} />
         </G>
       )}
       {/* head */}
