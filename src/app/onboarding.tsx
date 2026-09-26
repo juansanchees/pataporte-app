@@ -37,8 +37,8 @@ function Spread() {
 function StampArt() {
   return (
     <View style={{ alignItems: 'center', gap: 18 }}>
-      <CircleStamp top="CUIDADO FEITO" bottom="+15 MILHAS" main="V10" sub="02 MAR 26" color={C.coralInk} size={170} rotation={12} seed={31} />
-      <View style={{ backgroundColor: C.coverDeep, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 10 }}><T v="bold" style={{ color: C.goldPale, fontSize: 15 }}>+15 milhas · carimbo novo!</T></View>
+      <CircleStamp top="CUIDADO FEITO" bottom="+100 MILHAS" main="V10" sub="02 MAR 26" color={C.coralInk} size={170} rotation={12} seed={31} />
+      <View style={{ backgroundColor: C.coverDeep, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 10 }}><T v="bold" style={{ color: C.goldPale, fontSize: 15 }}>+100 milhas · carimbo novo!</T></View>
     </View>
   );
 }

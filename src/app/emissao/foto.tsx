@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Image, View, useWindowDimensions } from 'react-native';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import Svg, { Ellipse, Path } from 'react-native-svg';
 import { useApp } from '@/store/app';
 import { EmissionPage } from '@/components/emission';
@@ -11,6 +11,7 @@ import { Icon } from '@/art/Icon';
 import { pickImage, resolvePhotoUri } from '@/services/photos';
 import { aiEnabled, aiErrorText, analyzePetPhoto, ensureAiConsent, imageForAi, type PhotoAnalysis } from '@/services/ai';
 import { C } from '@/theme';
+import { useCadastro } from '@/components/v11/cadastro/session';
 
 type Phase = 'idle' | 'reading' | 'done' | 'nokey' | 'notpet' | 'error';
 
@@ -25,6 +26,15 @@ export default function Foto() {
   const [result, setResult] = useState<PhotoAnalysis | null>(null);
   const [errMsg, setErrMsg] = useState('');
   const scan = useRef(new Animated.Value(0)).current;
+  const editing = d.editingPetId !== null;
+  // emissão nova: começa limpa (sem respostas de uma emissão anterior) e passa pelo mapa dos capítulos
+  useState(() => {
+    const s = useCadastro.getState();
+    const fresh = !editing && !d.name && !d.photoUri && !Object.keys(d.vaccineAnswers ?? {}).length;
+    if (fresh && (s.done.length || Object.keys(s.answered).length || s.firstVaccineDone)) s.reset();
+    return 0;
+  });
+  const mapSeen = useCadastro((s) => s.mapSeen);
 
   useEffect(() => {
     if (phase !== 'reading') return;
@@ -62,7 +72,7 @@ export default function Foto() {
   };
 
   const manual = () => router.push('/emissao/especie');
-  const confirm = () => router.push('/emissao/perfil');
+  const confirm = () => router.push({ pathname: '/emissao/sobre', params: { q: 'nome' } });
   const ty = scan.interpolate({ inputRange: [0, 1], outputRange: [20, H - 24] });
 
   const footerLabel = phase === 'done' ? 'Está certo, continuar' : phase === 'idle' ? 'Montar sem foto' : 'Montar manualmente';
@@ -78,6 +88,8 @@ export default function Foto() {
     ...(d.ancestry.length ? [['Parece com', d.ancestry.join(' e ')] as [string, string]] : []),
     ...(d.size ? [['Porte', d.size.charAt(0).toUpperCase() + d.size.slice(1)] as [string, string]] : []),
   ];
+
+  if (!editing && !mapSeen) return <Redirect href={{ pathname: '/emissao/mapa', params: { cap: '1' } }} />;
 
   return (
     <EmissionPage step={0} title={phase === 'done' ? 'Encontramos!' : 'Foto do seu pet'} onNext={onNext} nextLabel={footerLabel} disabled={phase === 'reading'}

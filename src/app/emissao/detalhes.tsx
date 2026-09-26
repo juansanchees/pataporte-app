@@ -25,7 +25,7 @@ export default function Detalhes() {
 
   const next = async () => {
     if (editing) { await useApp.getState().saveEdit(); router.back(); router.back(); return; }
-    router.push('/emissao/perfil');
+    router.push({ pathname: '/emissao/sobre', params: { q: 'nome' } });
   };
 
   return (
