@@ -1,27 +1,53 @@
 import { careWords } from '@/domain/catalog';
-import React, { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Modal, Pressable, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useActivePet, useApp } from '@/store/app';
 import { Page, PageHeader } from '@/components/passport';
 import { Button, SectionTitle, T } from '@/components/ui';
 import { CircleStamp } from '@/art/Stamp';
 import { Icon } from '@/art/Icon';
+import { DurationSheet } from '@/components/v11/lembrete/DurationSheet';
 import { aboutCare, CATEGORY_LABEL } from '@/domain/catalog';
 import { careStatus, historyOf, projected, recurrenceLabel } from '@/domain/itinerary';
 import { diffDays, fmtBR, today } from '@/domain/dates';
+import { durationLabel, type ParasiteKind } from '@/domain/parasites';
+import type { ParasiteDuration } from '@/domain/types';
 import { C, STATUS_UI } from '@/theme';
 
 /** Ficha de um cuidado: o que é, quando tomou, quando é a próxima e o cronograma das próximas doses. */
 export default function Cuidado() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, acao } = useLocalSearchParams<{ id: string; acao?: string }>();
   const pet = useActivePet();
   const care = useApp((s) => s.data.cares.find((c) => c.id === id));
   const hour = useApp((s) => s.profile?.notifyHour ?? 9);
   const [confirmDel, setConfirmDel] = useState(false);
   const [dose, setDose] = useState<string | null>(null);
+  const [showDuration, setShowDuration] = useState(false);
+  const [busyDuration, setBusyDuration] = useState(false);
+  const acaoHandled = useRef(false);
+  const isParasite = care?.category === 'vermifugo' || care?.category === 'antiparasitario';
+  const parasiteKind: ParasiteKind = care?.category === 'vermifugo' ? 'vermifugo' : 'antipulgas';
+
+  // notificações: "Já tomou" abre o registro (com a pergunta de duração p/ vermífugo/antipulgas);
+  // "Mudar data" abre o mesmo seletor de data usado para corrigir carimbos.
+  useEffect(() => {
+    if (!care || acaoHandled.current || !acao) return;
+    acaoHandled.current = true;
+    if (acao === 'carimbar' || acao === 'tomou') { if (isParasite) setShowDuration(true); else useApp.getState().askStamp(care.id); }
+    else if (acao === 'mudar-data' || acao === 'mudar') useApp.getState().askStamp(care.id);
+  }, [care, acao, isParasite]);
+
   if (!pet || !care) return <Page header={<PageHeader title="Cuidado" />}><T>Esse cuidado não existe mais.</T></Page>;
+
   const t = today();
+  const confirmDuration = async (d: ParasiteDuration) => {
+    setBusyDuration(true);
+    const r = await useApp.getState().setParasiteLast(parasiteKind, t, d);
+    setBusyDuration(false);
+    setShowDuration(false);
+    if (r) useApp.getState().showToast(`Registrado! ${durationLabel(r.months)} · próximo ${r.label}.`);
+  };
   const st = careStatus(care, t);
   const ui = STATUS_UI[st];
   const past = historyOf(care);
@@ -32,7 +58,7 @@ export default function Cuidado() {
 
   return (
     <Page seed={23} header={<PageHeader title={care.name} eyebrow={CATEGORY_LABEL[care.category].toUpperCase()} />}
-      footer={st !== 'carimbado' ? <Button label={careWords(care.category).done} icon="stamp" variant="stamp" onPress={() => useApp.getState().askStamp(care.id)} /> : undefined}>
+      footer={st !== 'carimbado' ? <Button label={careWords(care.category).done} icon="stamp" variant="stamp" onPress={() => (isParasite ? setShowDuration(true) : useApp.getState().askStamp(care.id))} /> : undefined}>
       <View style={{ gap: 16 }}>
         <View style={{ backgroundColor: ui.bg, borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
           <View style={{ flex: 1, gap: 4 }}>
@@ -92,6 +118,9 @@ export default function Cuidado() {
           <Button label="Remover do itinerário" variant="ghost" onPress={() => setConfirmDel(true)} />
         )}
       </View>
+      <Modal visible={showDuration} transparent animationType="slide" onRequestClose={() => setShowDuration(false)}>
+        <DurationSheet title="Quanto tempo ele protege?" busy={busyDuration} onConfirm={confirmDuration} onClose={() => setShowDuration(false)} />
+      </Modal>
     </Page>
   );
 }

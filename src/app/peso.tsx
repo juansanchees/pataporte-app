@@ -7,13 +7,16 @@ import { useActivePet, useApp } from '@/store/app';
 import { Page, PageHeader } from '@/components/passport';
 import { Button, Field, MilesChip, SectionTitle, T } from '@/components/ui';
 import { fmtBR, fmtLong, fmtShort, parseBR, today } from '@/domain/dates';
+import { PAID_PLANS } from '@/domain/commerce';
 import type { WeightLog } from '@/domain/types';
 import { C, F } from '@/theme';
-import { Redirect } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 
 export default function Peso() {
   const pet = useActivePet();
   const weights = useApp((s) => s.data.weights);
+  const limits = useApp((s) => s.limits());
+  const chartLocked = PAID_PLANS && !limits.weightChart;
   const { width } = useWindowDimensions();
   const [val, setVal] = useState('');
   const [edit, setEdit] = useState<WeightLog | null>(null);
@@ -47,7 +50,13 @@ export default function Peso() {
           </View>
           <T style={{ fontSize: 14 }}>{last ? `Última pesagem em ${fmtLong(last.day)}` : 'Ainda sem pesagens. Registre a primeira abaixo.'}</T>
         </View>
-        {pts.length >= 2 && (
+        {chartLocked ? (
+          <View style={{ backgroundColor: C.paper2, borderWidth: 2, borderStyle: 'dashed', borderColor: C.inkFaint, borderRadius: 14, padding: 18, gap: 10, alignItems: 'center' }}>
+            <Icon name="lock" size={22} color={C.inkSoft} />
+            <T v="bold" style={{ textAlign: 'center' }}>O gráfico de evolução é exclusivo da Primeira Classe.</T>
+            <Button small label="Ver planos" onPress={() => router.push('/planos')} />
+          </View>
+        ) : pts.length >= 2 && (
           <View style={{ backgroundColor: C.sheet, borderWidth: 1, borderColor: C.line, borderRadius: 14, paddingVertical: 12 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, marginBottom: 4 }}>
               <T v="label">Evolução</T>

@@ -65,7 +65,11 @@ export default function NovoCuidado() {
             sub={appliedDay ? fmtLong(appliedDay) : ''} color={cat === 'vacina' ? C.blue : cat === 'vermifugo' ? C.green : cat === 'antiparasitario' ? C.purple : C.coralInk} size={108} rotation={-10} seed={101} />
           <View style={{ flex: 1 }}><T v="label">Prévia do carimbo</T><T style={{ fontSize: 15, color: C.inkSoft }}>{stampNow ? 'Já aplicado: vai direto para a página de carimbos.' : 'Futuro: entra no itinerário com chamada de embarque.'}</T></View>
         </View>
-        <View style={{ marginBottom: 16 }}><FieldLabel pt="Tipo" en="Type" /><ChipRow options={TYPES.map((x) => x[0])} value={type} onChange={setType} /></View>
+        <View style={{ marginBottom: 16 }}>
+          <FieldLabel pt="Tipo" en="Type" />
+          <ChipRow options={TYPES.map((x) => x[0])} value={type} onChange={(v) => (v === 'Remédio' ? router.push('/lembrete/remedio') : setType(v))} />
+          <T style={{ fontSize: 13.5, color: C.inkSoft, marginTop: 4 }}>“Remédio” abre o lembrete com horários automáticos.</T>
+        </View>
         <Field pt="Nome" en="Name" value={name} onChangeText={setName} placeholder="Ex.: Antirrábica" autoCapitalize="sentences" />
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <Field pt="Aplicada em" value={applied} onChangeText={setApplied} placeholder="DD/MM/AAAA" keyboardType="numbers-and-punctuation" style={{ flex: 1 }} />
