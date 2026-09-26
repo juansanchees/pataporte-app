@@ -1,376 +1,434 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, TextInput, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { useActivePet, useApp } from '@/store/app';
-import { MoodTag, Page, PetAvatar, PetPhoto } from '@/components/passport';
-import { DUTY_ITEMS } from '@/domain/commerce';
-import { careWords } from '@/domain/catalog';
-import { Button, IconButton, T } from '@/components/ui';
-import { GuillocheG, Leather, Emblem } from '@/art/patterns';
-import { Icon, type IconName } from '@/art/Icon';
-import { careStatus } from '@/domain/itinerary';
-import { levelFor, milesTotals, moodFor, nextLevel } from '@/domain/gamification';
-import { weightTrend, fmtKg } from '@/domain/diary';
-import { greeting, ROUTINE_ICON, routineItems, routineOf, routineProgress, routineSections, type RoutineItem } from '@/domain/routine';
-import { tipOfDay } from '@/domain/breeds';
-import { diffDays, fmtBR, fmtShort, today } from '@/domain/dates';
-import type { Routine } from '@/domain/types';
-import { C, F } from '@/theme';
+import { T } from '@/components/ui';
+import { PaperRings } from '@/art/patterns';
+import { HomeIcon, PawFill, type HomeIconName } from '@/art/icons-home';
+import { PetRound } from '@/components/v11/home/PetRound';
+import { RoutineEditor, WalkSheet } from '@/components/v11/home/HomeSheets';
+import { doseRoute, MILES_ROUTE, newReminderRoute } from '@/components/v11/home/routes';
+import { agoraItem, nextVaccine, progress, todayItems, vaccinesSummary, type Agora, type TodayItem } from '@/domain/today';
+import { careStreak, milesSummary, moodFor } from '@/domain/gamification';
+import { ageLabel } from '@/domain/vaccines';
+import { fmtKg, weightTrend } from '@/domain/diary';
+import { greeting, routineOf } from '@/domain/routine';
+import { fromDay, MONTH_NAMES, toDay, WEEKDAY_NAMES } from '@/domain/dates';
 import { art } from '@/domain/words';
+import { track } from '@/services/analytics';
+import { C } from '@/theme';
 
-const DUTY_NAME: Record<string, string> = Object.fromEntries(DUTY_ITEMS.map((d) => [d.id, d.name]));
+/**
+ * Home oficial (Home-Final + Home-Sequencia + Home-Vazia + AGORA atrasado do Dose-Atrasada).
+ * Ordem: saudação · chip do pet / emergência / sino · cartão do pet · 4 bolinhas · AGORA · Próxima vacina · Hoje.
+ */
+const AGENDA_VACINAS = '/itinerario?filtro=vacinas';
 
-function nowHHMM() {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+function kindIcon(it: TodayItem): HomeIconName {
+  if (it.kind === 'remedio') return 'pill';
+  if (it.kind === 'passeio') return 'walk';
+  if (it.kind === 'comida') return 'bowl';
+  if (it.reminderType === 'banho') return 'bath';
+  if (it.reminderType === 'consulta') return 'vet';
+  return 'bell';
+}
+
+function inLabel(min: number): string {
+  if (min < 1) return 'AGORA';
+  if (min < 60) return `EM ${min} MIN`;
+  const h = Math.round(min / 60);
+  return `EM ${h} H`;
+}
+
+function useNow(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const i = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(i); }, []);
+  return now;
 }
 
 export default function Inicio() {
   const pet = useActivePet();
   const data = useApp((s) => s.data);
   const user = useApp((s) => s.profile?.name ?? '');
-  const { width } = useWindowDimensions();
-  const [walk, setWalk] = useState<RoutineItem | null>(null);
-  const [editRoutine, setEditRoutine] = useState(false);
-  const [showPassed, setShowPassed] = useState(false);
-  const [showDone, setShowDone] = useState(false);
-  const [, tick] = useState(0);
-  useEffect(() => { const i = setInterval(() => tick((x) => x + 1), 60000); return () => clearInterval(i); }, []);
-  const t = today();
-
-  const view = useMemo(() => {
-    if (!pet) return null;
-    const { total } = milesTotals(data.ledger);
-    const items = routineItems(pet, data.ledger, t);
-    const upcoming = data.cares.filter((c) => c.active && c.nextDate && careStatus(c, t) !== 'atrasado').sort((a, b) => a.nextDate!.localeCompare(b.nextDate!));
-    return {
-      mood: moodFor(data.cares, t),
-      total, lv: levelFor(total), nx: nextLevel(total),
-      items, progress: routineProgress(items),
-      overdue: data.cares.filter((c) => careStatus(c, t) === 'atrasado'),
-      nextCare: upcoming.find((c) => c.category === 'vacina') ?? upcoming[0],
-      weight: weightTrend(data.weights, t),
-      tip: tipOfDay(pet, t),
-      lastDiary: [...data.diary].sort((a, b) => b.day.localeCompare(a.day) || b.id.localeCompare(a.id))[0],
-    };
-  }, [pet, data, t]);
-  if (!pet || !view) return <Redirect href="/" />;
-
-  const now = nowHHMM();
-  const sec = routineSections(view.items, now);
-  const a = art(pet);
-  const focus = sec.next ?? sec.anytime[0] ?? null;
-  const bubble = view.overdue.length
-    ? `${view.overdue[0].name} está em atraso. Me leva ao veterinário?`
-    : view.progress.complete ? 'Dia perfeito! Obrigado por cuidar de mim.'
-      : !focus ? 'Que dia tranquilo!'
-        : focus.kind === 'racao' ? (focus.time && focus.time <= now ? 'Tá na hora da minha comida!' : `Minha próxima refeição é às ${focus.time}.`)
-          : focus.kind === 'passeio' ? (focus.time && focus.time <= now ? 'Bora passear?' : `Meu passeio é às ${focus.time}.`)
-            : focus.kind === 'brincar' ? 'Brinca comigo um pouquinho?'
-              : focus.kind === 'agua' ? 'Troca minha água, por favor?'
-                : focus.kind === 'remedio' ? 'Não esquece meu remédio!'
-                  : focus.kind === 'caixa' ? 'Minha caixinha precisa de uma limpeza.'
-                    : 'Bora escovar os dentes?';
-
-  const tap = (it: RoutineItem) => {
-    if (it.done) return useApp.getState().uncheckRoutine(it.key);
-    if (it.kind === 'passeio') return setWalk(it);
-    useApp.getState().checkRoutine(it);
-  };
-
-  const cardW = width - 48;
-  const tiles: [string, string, IconName, string][] = [
-    ['Peso', view.weight ? fmtKg(view.weight.last) : 'Registrar', 'scale', '/peso'],
-    ['Diário', view.lastDiary ? `Último: ${fmtShort(view.lastDiary.day)}` : 'Escrever', 'paw', '/diario'],
-    ['Vou viajar', 'O que precisa', 'suitcase', '/viagem'],
-    ['Para o vet', 'Resumo da saúde', 'doc', '/dossie'],
-    ['Saúde da raça', 'O que prevenir', 'shield', '/raca'],
-    ['Loja de milhas', 'Prêmios do avatar', 'bag', '/duty-free'],
-  ];
-  const pct = view.nx ? Math.round(((view.total - view.lv.min) / (view.nx.min - view.lv.min)) * 100) : 100;
-
-  const Row = ({ it, faded }: { it: RoutineItem; faded?: boolean }) => (
-    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: it.done }} accessibilityLabel={`${it.title}${it.time ? ` às ${it.time}` : ''}`} onPress={() => tap(it)}
-      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, minHeight: 68, borderTopWidth: 1, borderColor: C.line, backgroundColor: pressed ? C.paper2 : 'transparent', opacity: faded ? 0.75 : 1 })}>
-      <View style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 2.5, borderColor: it.done ? C.green : C.inkSoft, backgroundColor: it.done ? C.green : '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
-        {it.done ? <Icon name="check" size={18} color="#fff" sw={3} /> : null}
-      </View>
-      <View style={{ flex: 1 }}>
-        <T v="bold" style={{ fontSize: 17, color: it.done ? C.inkSoft : C.ink, textDecorationLine: it.done ? 'line-through' : 'none' }}>{it.title}</T>
-        {!it.done ? <T style={{ fontSize: 15, color: C.inkSoft }} numberOfLines={1}>{it.sub}</T> : null}
-      </View>
-      {it.time ? <T v="xbold" style={{ fontSize: 17, color: C.inkSoft }}>{it.time}</T> : null}
-    </Pressable>
-  );
-  const Fold = ({ open, onPress, label, tone }: { open: boolean; onPress: () => void; label: string; tone?: string }) => (
-    <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={onPress}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, paddingHorizontal: 16, borderTopWidth: 1, borderColor: C.line }}>
-      <T v="bold" style={{ flex: 1, fontSize: 16, color: tone ?? C.inkSoft }}>{label}</T>
-      <View style={{ transform: [{ rotate: open ? '-90deg' : '90deg' }] }}><Icon name="chevron" size={18} color={tone ?? C.inkSoft} sw={2.4} /></View>
-    </Pressable>
-  );
-
-  return (
-    <Page seed={14}
-      header={
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 24, paddingTop: 10, paddingBottom: 10 }}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Trocar de passaporte" onPress={() => router.push('/passaportes')} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minHeight: 48 }}>
-            <View style={{ width: 34, height: 44, borderRadius: 5, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}><Leather w={34} h={44} color={pet.coverColor} radius={5} /><Emblem size={24} bg={pet.coverColor} /></View>
-            <View style={{ flex: 1 }}>
-              <T style={{ fontSize: 15, color: C.inkSoft }} numberOfLines={1}>{`${greeting(new Date().getHours())}${user ? `, ${user.split(' ')[0]}` : ''}!`}</T>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><T v="xbold" style={{ fontSize: 19 }}>{pet.name}</T><Icon name="chevron" size={15} sw={2.4} /></View>
-            </View>
-          </Pressable>
-          <IconButton icon="gear" label="Ajustes" onPress={() => router.push('/ajustes')} />
-          <IconButton icon="heart" label="Emergência SOS" tone="red" onPress={() => router.push('/sos')} />
-        </View>
-      }>
-      <View style={{ gap: 18 }}>
-        {/* --------------------------------------------------- pet + fala + nível */}
-        <View style={{ backgroundColor: C.sheet, borderWidth: 1, borderColor: C.line, borderRadius: 18, padding: 16, gap: 14, overflow: 'hidden' }}>
-          <Svg width={cardW} height={170} style={{ position: 'absolute' }} pointerEvents="none">
-            <GuillocheG w={cardW} y0={10} band={110} n={10} seed={41} color={C.purple} opacity={0.1} />
-          </Svg>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Página de identificação ${a.do} ${pet.name}`} onPress={() => router.push('/perfil')} style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-            <View>
-              <PetPhoto pet={pet} mood={view.mood} w={104} h={128} photo />
-              {pet.photoUri ? (
-                <View style={{ position: 'absolute', right: -8, bottom: -8, width: 48, height: 48, borderRadius: 24, backgroundColor: '#fff', borderWidth: 2, borderColor: C.line, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-end' }}>
-                  <PetAvatar pet={pet} mood={view.mood} size={52} />
-                </View>
-              ) : null}
-            </View>
-            <View style={{ flex: 1, gap: 8 }}>
-              <View style={{ backgroundColor: '#fff', borderRadius: 16, borderBottomLeftRadius: 4, padding: 12, borderWidth: 1, borderColor: C.line }}>
-                <T v="bold" style={{ fontSize: 16.5, lineHeight: 22 }}>{`“${bubble}”`}</T>
-              </View>
-              <MoodTag mood={view.mood} />
-            </View>
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Milhas e níveis" onPress={() => router.push('/mapa')} style={{ gap: 8 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-              <T v="xbold" style={{ fontSize: 17, color: C.purpleInk, flex: 1 }}>{`Nível ${view.lv.n} · ${view.lv.name}`}</T>
-              <T v="xbold" style={{ fontSize: 17 }}>{`${view.total} milhas`}</T>
-            </View>
-            <View style={{ height: 12, borderRadius: 6, backgroundColor: C.paper3 }}>
-              <View style={{ height: 12, borderRadius: 6, width: `${Math.max(3, pct)}%`, backgroundColor: C.purpleInk }} />
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <T style={{ flex: 1, fontSize: 15.5, color: C.inkSoft }}>{view.nx ? `Faltam ${view.nx.min - view.total}${view.nx.reward && DUTY_NAME[view.nx.reward] ? ` · prêmio: ${DUTY_NAME[view.nx.reward]}` : ' para o próximo nível'}` : 'Nível máximo!'}</T>
-              <T v="bold" style={{ fontSize: 15.5, color: C.cover }}>Como ganhar ›</T>
-            </View>
-          </Pressable>
-        </View>
-
-        {/* --------------------------------------------------- atrasados (um card só) */}
-        {view.overdue.length === 1 ? (() => {
-          const c = view.overdue[0];
-          const late = -diffDays(t, c.nextDate!);
-          return (
-            <View style={{ backgroundColor: C.redPale, borderRadius: 16, padding: 16, borderWidth: 2, borderColor: C.red, gap: 12 }}>
-              <Pressable onPress={() => router.push({ pathname: '/cuidado/[id]', params: { id: c.id } })} style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-                <Icon name="bell" size={26} color={C.red} />
-                <View style={{ flex: 1 }}>
-                  <T v="xbold" style={{ fontSize: 18, color: C.red }}>{`Em atraso: ${c.name}`}</T>
-                  <T style={{ fontSize: 15.5 }}>{`Era para ${fmtBR(c.nextDate!)} (há ${late} ${late === 1 ? 'dia' : 'dias'})`}</T>
-                </View>
-              </Pressable>
-              <Button label={careWords(c.category).done} icon="check" onPress={() => useApp.getState().askStamp(c.id)} style={{ backgroundColor: C.red, minHeight: 50 }} />
-            </View>
-          );
-        })() : view.overdue.length > 1 ? (
-          <Pressable accessibilityRole="button" onPress={() => router.push('/itinerario')} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.redPale, borderRadius: 16, padding: 16, borderWidth: 2, borderColor: C.red }}>
-            <Icon name="bell" size={26} color={C.red} />
-            <View style={{ flex: 1 }}>
-              <T v="xbold" style={{ fontSize: 18, color: C.red }}>{`${view.overdue.length} cuidados em atraso`}</T>
-              <T style={{ fontSize: 15.5 }} numberOfLines={2}>{view.overdue.map((c) => c.name).join(', ')}</T>
-            </View>
-            <Icon name="chevron" size={20} color={C.red} sw={2.4} />
-          </Pressable>
-        ) : null}
-
-        {/* --------------------------------------------------- agora */}
-        <View style={{ backgroundColor: C.sheet, borderWidth: 1, borderColor: C.line, borderRadius: 18, overflow: 'hidden' }}>
-          <View style={{ padding: 16, gap: 10 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <T v="serif" style={{ flex: 1, fontSize: 24 }}>Hoje</T>
-              <T v="xbold" style={{ fontSize: 17, color: view.progress.complete ? C.green : C.inkSoft }}>{`${view.progress.done} de ${view.progress.total} feitos`}</T>
-            </View>
-            <View style={{ height: 10, borderRadius: 5, backgroundColor: C.paper3 }}>
-              <View style={{ height: 10, borderRadius: 5, backgroundColor: C.green, width: `${view.progress.total ? Math.round((view.progress.done / view.progress.total) * 100) : 0}%` }} />
-            </View>
-          </View>
-
-          {focus ? (
-            <View style={{ marginHorizontal: 12, marginBottom: 14, borderRadius: 16, backgroundColor: C.cover, padding: 16, gap: 12 }}>
-              <T v="bold" style={{ fontSize: 15, color: C.goldLight }}>{focus.time ? (focus.time <= now ? 'AGORA' : `PRÓXIMO · ${focus.time}`) : 'QUALQUER HORA DO DIA'}</T>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: C.goldPale, alignItems: 'center', justifyContent: 'center' }}><Icon name={ROUTINE_ICON[focus.kind]} size={30} color={C.cover} /></View>
-                <View style={{ flex: 1 }}>
-                  <T v="xbold" style={{ fontSize: 21, color: C.goldPale }}>{focus.title}</T>
-                  <T style={{ fontSize: 16, color: C.goldLight }}>{focus.sub}</T>
-                </View>
-              </View>
-              <Pressable accessibilityRole="button" onPress={() => tap(focus)} style={({ pressed }) => ({ minHeight: 58, borderRadius: 14, backgroundColor: pressed ? C.goldLight : C.goldPale, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 })}>
-                <Icon name="check" size={22} color={C.cover} sw={3} />
-                <T v="xbold" style={{ fontSize: 18, color: C.cover }}>{focus.kind === 'passeio' ? 'Já passeamos' : focus.kind === 'racao' ? 'Já dei a comida' : 'Feito'}</T>
-              </Pressable>
-            </View>
-          ) : view.progress.complete ? (
-            <Pressable onPress={() => router.push('/diario')} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.greenPale, marginHorizontal: 12, marginBottom: 14, borderRadius: 16, padding: 16 }}>
-              <Icon name="trophy" size={28} color={C.green} />
-              <T v="bold" style={{ flex: 1, fontSize: 17, color: C.green }}>Tudo feito hoje! Já anotamos no diário.</T>
-            </Pressable>
-          ) : (
-            <T style={{ fontSize: 16.5, color: C.inkSoft, paddingHorizontal: 16, paddingBottom: 14 }}>Nada para agora. Aproveite!</T>
-          )}
-
-          {sec.later.length || sec.anytime.filter((x) => x !== focus).length ? (
-            <T v="bold" style={{ fontSize: 15, color: C.inkSoft, paddingHorizontal: 16, paddingBottom: 6 }}>DEPOIS</T>
-          ) : null}
-          {sec.later.filter((x) => x !== focus).map((it) => <Row key={it.key} it={it} />)}
-          {sec.anytime.filter((x) => x !== focus).map((it) => <Row key={it.key} it={it} />)}
-          {sec.passed.length ? <Fold open={showPassed} onPress={() => setShowPassed(!showPassed)} tone={C.coralInk} label={`Já passou do horário (${sec.passed.length}) · marcar se fez`} /> : null}
-          {showPassed && sec.passed.map((it) => <Row key={it.key} it={it} faded />)}
-          {sec.done.length ? <Fold open={showDone} onPress={() => setShowDone(!showDone)} tone={C.green} label={`Feitos hoje (${sec.done.length})`} /> : null}
-          {showDone && sec.done.map((it) => <Row key={it.key} it={it} />)}
-          <Pressable accessibilityRole="button" onPress={() => setEditRoutine(true)} style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, minHeight: 54, borderTopWidth: 1, borderColor: C.line }}>
-            <Icon name="edit" size={18} color={C.cover} /><T v="bold" style={{ fontSize: 16, color: C.cover }}>Mudar horários</T>
-          </Pressable>
-        </View>
-
-        {/* --------------------------------------------------- próximo cuidado */}
-        {view.nextCare ? (() => {
-          const c = view.nextCare;
-          const n = diffDays(t, c.nextDate!);
-          return (
-            <Pressable accessibilityRole="button" onPress={() => router.push('/itinerario')} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: C.sheet, borderWidth: 1, borderColor: C.line, borderRadius: 18, padding: 16 }}>
-              <View style={{ width: 64, height: 64, borderRadius: 14, backgroundColor: C.cover, alignItems: 'center', justifyContent: 'center' }}>
-                <T v="serif" style={{ fontSize: 26, lineHeight: 28, color: C.goldPale }}>{n}</T>
-                <T v="bold" style={{ fontSize: 14.5, color: C.goldLight }}>{n === 1 ? 'dia' : 'dias'}</T>
-              </View>
-              <View style={{ flex: 1 }}>
-                <T v="bold" style={{ color: C.inkSoft, fontSize: 15 }}>{c.category === 'vacina' ? 'Próxima vacina' : 'Próximo cuidado'}</T>
-                <T v="xbold" style={{ fontSize: 18 }} numberOfLines={2}>{c.name}</T>
-                <T style={{ fontSize: 15.5, color: C.inkSoft }}>{fmtBR(c.nextDate!)}</T>
-              </View>
-              <Icon name="chevron" size={20} color={C.inkSoft} sw={2.4} />
-            </Pressable>
-          );
-        })() : null}
-
-        {/* --------------------------------------------------- atalhos */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-          {tiles.map(([label, sub, icon, href]) => (
-            <Pressable key={label} accessibilityRole="button" accessibilityLabel={label} onPress={() => router.push(href as never)}
-              style={({ pressed }) => ({ width: (cardW - 12) / 2, minHeight: 112, gap: 6, backgroundColor: pressed ? C.paper2 : C.sheet, borderWidth: 1, borderColor: C.line, borderRadius: 18, padding: 16 })}>
-              <Icon name={icon} size={30} color={C.cover} />
-              <T v="xbold" style={{ fontSize: 17 }}>{label}</T>
-              <T style={{ fontSize: 15, color: C.inkSoft }} numberOfLines={1}>{sub}</T>
-            </Pressable>
-          ))}
-        </View>
-
-        {/* --------------------------------------------------- dica */}
-        {view.tip ? (
-          <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/guia', params: { q: view.tip!.risk.question } })}
-            style={{ backgroundColor: C.yellowCard, borderWidth: 1, borderColor: C.yellowLine, borderRadius: 18, padding: 16, gap: 8 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Icon name="sparkle" size={22} color={C.goldDark} />
-              <T v="xbold" style={{ flex: 1, fontSize: 16, color: C.goldDark }}>Dica do dia</T>
-            </View>
-            <T v="bold" style={{ fontSize: 17, lineHeight: 24 }}>{view.tip.tip}</T>
-            <T v="bold" style={{ fontSize: 15.5, color: C.cover }}>Perguntar ao Guia ›</T>
-          </Pressable>
-        ) : null}
-      </View>
-
-      <WalkSheet item={walk} petName={`${a.do} ${pet.name}`} onClose={() => setWalk(null)} />
-      {editRoutine && <RoutineEditor routine={routineOf(pet)} species={pet.species} onClose={() => setEditRoutine(false)} />}
-    </Page>
-  );
-}
-
-function Sheet({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(11,35,40,0.55)', justifyContent: 'flex-end' }}>
-        <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Fechar" />
-        <View style={{ backgroundColor: C.paper, borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 24, paddingBottom: 24 + insets.bottom, gap: 12 }}>{children}</View>
-      </View>
-    </Modal>
-  );
-}
+  const { width } = useWindowDimensions();
+  const now = useNow();
+  const [walkItem, setWalkItem] = useState<TodayItem | null>(null);
+  const [editRoutine, setEditRoutine] = useState(false);
+  const [showDone, setShowDone] = useState(false);
+  const t = toDay(now);
 
-function WalkSheet({ item, petName, onClose }: { item: RoutineItem | null; petName: string; onClose: () => void }) {
-  const opts = ['15 min', '30 min', '1 hora', 'Mais de 1 hora'];
+  const v = useMemo(() => {
+    if (!pet) return null;
+    const items = todayItems({ data }, pet, now);
+    const w = weightTrend(data.weights, t);
+    return {
+      items,
+      prog: progress(items),
+      agora: agoraItem(items, now),
+      nv: nextVaccine(data.cares, t),
+      vs: vaccinesSummary(data.cares, t),
+      streak: careStreak(data.ledger, t),
+      miles: milesSummary(data.ledger, t),
+      mood: moodFor(data.cares, t),
+      weight: w?.last ?? pet.weightKg ?? null,
+      age: pet.birthDate ? ageLabel(pet.birthDate, t) : null,
+    };
+  }, [pet, data, now, t]);
+
+  if (!pet || !v) return <Redirect href="/" />;
+  const a = art(pet);
+  const firstName = user.trim().split(' ')[0];
+
+  // ------------------------------------------------------------ ações
+  const mark = async (it: TodayItem, minutes?: string) => {
+    await useApp.getState().markTodayItem(it, minutes ? { minutes } : undefined);
+    if (it.kind === 'remedio') track('dose_marcada', { origem: 'home', status: 'given' });
+  };
+  const openDose = (it: TodayItem) => {
+    if (it.source.type === 'dose') router.push(doseRoute(it.source.reminderId, it.source.at) as never);
+  };
+  /** Toque em "Dar"/"Feito" ou numa linha pendente da lista. */
+  const act = (it: TodayItem) => {
+    if (it.kind === 'remedio' && it.status === 'atrasado' && it.source.type === 'dose') return openDose(it);
+    if (it.kind === 'passeio' && it.source.type === 'routine') return setWalkItem(it);
+    return mark(it);
+  };
+  const walkShortcut = () => {
+    const pend = v.items.find((i) => i.kind === 'passeio' && !i.done);
+    if (pend) return act(pend);
+    if (v.items.some((i) => i.kind === 'passeio')) { useApp.getState().showToast(`Os passeios de hoje já estão marcados. Bom trabalho!`); return; }
+    router.push(newReminderRoute('passeio') as never);
+  };
+
+  const agoraKey = v.agora?.item.key;
+  const rest = v.items.filter((i) => i.key !== agoraKey);
+  const pending = rest.filter((i) => !i.done);
+  const done = rest.filter((i) => i.done);
+  const emptyDay = v.items.length === 0;
+  const showMiles = v.miles.lifetime > 0 || v.streak > 0;
+  const heroW = width - 40;
+
   return (
-    <Sheet visible={!!item} onClose={onClose}>
-      <T v="serif" style={{ fontSize: 24 }}>{`Quanto tempo durou o passeio ${petName}?`}</T>
-      <T style={{ fontSize: 14.5, color: C.inkSoft }}>Fica registrado no diário de vida.</T>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {opts.map((o) => (
-          <Pressable key={o} accessibilityRole="button" onPress={async () => { const it = item; onClose(); if (it) await useApp.getState().checkRoutine(it, o); }}
-            style={{ width: '48%', flexGrow: 1, minHeight: 54, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: C.cover }}>
-            <T v="bold" style={{ fontSize: 16, color: C.goldPale }}>{o}</T>
+    <View style={{ flex: 1, backgroundColor: C.paper }}>
+      {/* fundo: degradê suave no topo + anéis de papel */}
+      <Svg width={width} height={420} style={{ position: 'absolute', top: 0, left: 0 }} pointerEvents="none">
+        <Defs>
+          <LinearGradient id="homeTop" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={C.goldPale} stopOpacity={1} />
+            <Stop offset="1" stopColor={C.paper} stopOpacity={1} />
+          </LinearGradient>
+        </Defs>
+        <Rect x={0} y={0} width={width} height={420} fill="url(#homeTop)" />
+      </Svg>
+      <View style={{ position: 'absolute', top: 0, left: 0, width, height: 380, overflow: 'hidden', opacity: 0.8 }} pointerEvents="none">
+        <PaperRings w={width} h={380} cy={204 + insets.top} opacity={0.7} />
+      </View>
+      <View pointerEvents="none" style={{ position: 'absolute', left: 22, top: insets.top + 120, transform: [{ rotate: '-20deg' }] }}><PawFill size={46} color={C.cover} opacity={0.06} /></View>
+      <View pointerEvents="none" style={{ position: 'absolute', right: 26, top: insets.top + 250, transform: [{ rotate: '18deg' }] }}><PawFill size={40} color={C.cover} opacity={0.06} /></View>
+
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 20, paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+        {/* ------------------------------------------------ cabeçalho */}
+        <T v="bold" numberOfLines={1} style={{ fontSize: 16, color: C.inkSoft }}>{`${greeting(now.getHours())}${firstName ? `, ${firstName}` : ''}`}</T>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 }}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Trocar de pet. Pet atual: ${pet.name}`} onPress={() => router.push('/passaportes')}
+            style={({ pressed }) => ({ flexShrink: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 2, borderColor: C.cover, borderRadius: 24, backgroundColor: pressed ? C.paper2 : C.sheet, paddingLeft: 3, paddingRight: 12 })}>
+            <PetRound pet={pet} size={38} border={2} />
+            <T v="xbold" numberOfLines={1} style={{ flexShrink: 1, fontSize: 17, color: C.cover }}>{pet.name}</T>
+            <HomeIcon name="down" size={18} color={C.cover} sw={2.6} />
           </Pressable>
-        ))}
-      </View>
-      <Button label="Cancelar" variant="ghost" onPress={onClose} />
-    </Sheet>
-  );
-}
+          <View style={{ flex: 1 }} />
+          <Pressable accessibilityRole="button" accessibilityLabel="Emergência" onPress={() => router.push('/sos')}
+            style={({ pressed }) => ({ width: 48, height: 48, borderRadius: 24, backgroundColor: pressed ? C.redPale : C.red, alignItems: 'center', justifyContent: 'center', shadowColor: C.red, shadowOpacity: 0.3, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 3 })}>
+            <HomeIcon name="heartPulse" size={24} color={C.white} sw={2.1} />
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Avisos e ajustes" onPress={() => router.push('/ajustes')}
+            style={({ pressed }) => ({ width: 48, height: 48, borderRadius: 24, backgroundColor: pressed ? C.paper2 : C.sheet, alignItems: 'center', justifyContent: 'center' })}>
+            <HomeIcon name="bell" size={22} color={C.cover} />
+          </Pressable>
+        </View>
 
-function RoutineEditor({ routine, species, onClose }: { routine: Routine; species: 'dog' | 'cat'; onClose: () => void }) {
-  const [r, setR] = useState<Routine>(routine);
-  const [newWalk, setNewWalk] = useState('');
-  const fix = (v: string) => {
-    const m = v.trim().match(/^(\d{1,2})(?::?(\d{2}))?$/);
-    if (!m) return null;
-    const h = Number(m[1]); const mi = Number(m[2] ?? '0');
-    return h <= 23 && mi <= 59 ? `${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}` : null;
-  };
-  const addWalk = () => {
-    const t = fix(newWalk);
-    if (!t) { useApp.getState().showToast('Horário inválido. Use o formato 17:30.'); return; }
-    if (!r.walkTimes.includes(t)) setR({ ...r, walkTimes: [...r.walkTimes, t].sort() });
-    setNewWalk('');
-  };
-  const Toggle = ({ on, label, sub, onPress }: { on: boolean; label: string; sub: string; onPress: () => void }) => (
-    <Pressable accessibilityRole="switch" accessibilityState={{ checked: on }} onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52 }}>
-      <View style={{ flex: 1 }}><T v="bold" style={{ fontSize: 15.5 }}>{label}</T><T style={{ fontSize: 14.5, color: C.inkSoft }}>{sub}</T></View>
-      <View style={{ width: 50, height: 30, borderRadius: 15, backgroundColor: on ? C.cover : C.paper3, padding: 3, alignItems: on ? 'flex-end' : 'flex-start' }}><View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#fff' }} /></View>
-    </Pressable>
-  );
-  return (
-    <Sheet visible onClose={onClose}>
-      <T v="serif" style={{ fontSize: 24 }}>Rotina diária</T>
-      <T style={{ fontSize: 14, color: C.inkSoft }}>Os horários da ração ficam na ficha de saúde. Aqui você ajusta o resto.</T>
-      <View>
-        <T v="bold" style={{ fontSize: 15.5, marginBottom: 6 }}>Passeios</T>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-          {r.walkTimes.map((w) => (
-            <Pressable key={w} accessibilityRole="button" accessibilityLabel={`Remover passeio das ${w}`} onPress={() => setR({ ...r, walkTimes: r.walkTimes.filter((x) => x !== w) })}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.cover, borderRadius: 10, paddingHorizontal: 12, minHeight: 42 }}>
-              <T v="monoBold" style={{ color: C.goldPale, fontSize: 14 }}>{w}</T><Icon name="close" size={14} color={C.goldPale} sw={2.4} />
-            </Pressable>
-          ))}
-          <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderStyle: 'dashed', borderColor: C.inkFaint, borderRadius: 10, paddingLeft: 10 }}>
-            <TextInput maxFontSizeMultiplier={1.15} value={newWalk} onChangeText={setNewWalk} placeholder="17:30" placeholderTextColor={C.inkFaint} keyboardType="numbers-and-punctuation" onSubmitEditing={addWalk} accessibilityLabel="Novo horário de passeio"
-              style={{ width: 60, minHeight: 42, fontFamily: F.monoBold, fontSize: 14, color: C.ink }} />
-            <Pressable accessibilityRole="button" accessibilityLabel="Adicionar passeio" onPress={addWalk} style={{ width: 40, height: 42, alignItems: 'center', justifyContent: 'center' }}><Icon name="plus" size={16} color={C.inkSoft} sw={2.4} /></Pressable>
+        {/* ------------------------------------------------ cartão do pet */}
+        <View style={{ marginTop: 12, borderRadius: 28, overflow: 'hidden', padding: 14, paddingHorizontal: 16, gap: 12, backgroundColor: '#E7EEE2', shadowColor: C.cover, shadowOpacity: 0.08, shadowRadius: 9, shadowOffset: { width: 0, height: 6 }, elevation: 2 }}>
+          <Svg width={heroW} height={400} style={{ position: 'absolute', left: 0, top: 0 }} pointerEvents="none">
+            <Defs>
+              <LinearGradient id="hero" x1="0" y1="0" x2="1" y2="1">
+                <Stop offset="0" stopColor={C.aquaPale} stopOpacity={1} />
+                <Stop offset="1" stopColor={C.paper} stopOpacity={1} />
+              </LinearGradient>
+            </Defs>
+            <Rect x={0} y={0} width={heroW} height={400} fill="url(#hero)" />
+          </Svg>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Ficha ${a.do} ${pet.name}`} onPress={() => router.push('/perfil')} style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+            <View style={{ shadowColor: C.cover, shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 4 }, elevation: 3, borderRadius: 50 }}>
+              <PetRound pet={pet} size={showMiles ? 88 : 100} mood={v.mood} />
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <T v="serif" numberOfLines={1} adjustsFontSizeToFit style={{ fontSize: 36, lineHeight: 40, color: C.cover }}>{pet.name}</T>
+              <T v="bold" numberOfLines={1} style={{ fontSize: 16, lineHeight: 21, color: C.inkSoft }}>{[pet.breed, v.age].filter(Boolean).join(' · ')}</T>
+              <View style={{ marginTop: 6, alignSelf: 'flex-start', maxWidth: '100%', minHeight: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.85)', paddingLeft: 6, paddingRight: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ring ratio={v.prog.ratio} />
+                <T v="xbold" numberOfLines={1} style={{ flexShrink: 1, fontSize: 15, color: C.ink }}>{v.prog.total ? `${v.prog.label} cuidados feitos` : 'Comece hoje'}</T>
+              </View>
+            </View>
+          </Pressable>
+
+          {showMiles ? (
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <View accessible accessibilityLabel={`Sequência: ${v.streak} ${v.streak === 1 ? 'dia' : 'dias'} seguidos cuidando ${a.do} ${pet.name}`}
+                style={{ flex: 1, minHeight: 44, borderRadius: 22, backgroundColor: C.goldPale, borderWidth: 1.5, borderColor: C.goldLight, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <HomeIcon name="streak" size={20} color={C.goldDark} sw={2.2} />
+                <T v="xbold" numberOfLines={1} style={{ flexShrink: 1, fontSize: 15, color: C.goldDark }}>{v.streak === 1 ? '1 dia seguido' : `${v.streak} dias seguidos`}</T>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel={`${v.miles.balance} milhas. Ver milhas ${a.do} ${pet.name}`} onPress={() => router.push(MILES_ROUTE as never)}
+                style={({ pressed }) => ({ minHeight: 48, borderRadius: 24, backgroundColor: pressed ? '#E3D7EC' : C.purplePale, paddingLeft: 10, paddingRight: 8, flexDirection: 'row', alignItems: 'center', gap: 6 })}>
+                <HomeIcon name="plane" size={20} color={C.purple} />
+                <T v="xbold" numberOfLines={1} style={{ fontSize: 15, color: C.purple }}>{`${v.miles.balance.toLocaleString('pt-BR')} milhas`}</T>
+                <HomeIcon name="chevron" size={16} color={C.purple} sw={2.6} />
+              </Pressable>
+            </View>
+          ) : null}
+
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Stat value={v.weight ? fmtKg(v.weight) : '—'} label="Peso" onPress={() => router.push('/peso')} />
+            <Stat value={v.age ?? '—'} label="Idade" />
+            <Stat value={v.vs.total ? v.vs.label : '—'} label="Vacinas" onPress={() => router.push(AGENDA_VACINAS as never)} />
           </View>
         </View>
-        {species === 'cat' && !r.walkTimes.length ? <T style={{ fontSize: 14.5, color: C.inkSoft, marginTop: 4 }}>Gatos normalmente não passeiam. Adicione se o seu passeia na guia.</T> : null}
+
+        {/* ------------------------------------------------ 4 bolinhas */}
+        <View style={{ marginTop: 12, flexDirection: 'row', justifyContent: 'space-around' }}>
+          <Bubble label="Vacinas" icon="syringe" bg={C.purplePale} fg={C.purple} onPress={() => router.push(AGENDA_VACINAS as never)} />
+          <Bubble label="Remédio" icon="pill" bg={C.amberPale} fg="#7A5204" onPress={() => router.push(newReminderRoute('remedio') as never)} />
+          <Bubble label="Passeio" icon="walk" bg={C.greenPale} fg={C.green} onPress={walkShortcut} />
+          <Bubble label="Peso" icon="scale" bg={C.aquaPale} fg={C.cover} onPress={() => router.push('/peso')} />
+        </View>
+
+        {/* ------------------------------------------------ AGORA */}
+        {v.agora ? <AgoraCard ag={v.agora} now={now} onAct={() => act(v.agora!.item)} onOpenDose={() => openDose(v.agora!.item)} /> : null}
+
+        {/* ------------------------------------------------ próxima vacina / primeiro passo */}
+        {v.nv ? (
+          <NextVaccineCard name={v.nv.name} date={v.nv.date} days={v.nv.daysUntil} late={v.nv.status === 'atrasado'} />
+        ) : (
+          <View style={{ marginTop: 12, borderRadius: 22, backgroundColor: C.cover, padding: 16, gap: 14, shadowColor: C.cover, shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 8 }, elevation: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <HomeIcon name="flag" size={24} color={C.goldLight} />
+              <T v="serif" style={{ fontSize: 22, lineHeight: 28, color: C.white }}>Seu primeiro passo</T>
+            </View>
+            <Pressable accessibilityRole="button" onPress={() => router.push(AGENDA_VACINAS as never)}
+              style={({ pressed }) => ({ minHeight: 52, borderRadius: 26, backgroundColor: pressed ? C.paper : C.white, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16 })}>
+              <HomeIcon name="syringe" size={22} color={C.cover} />
+              <T v="xbold" numberOfLines={1} adjustsFontSizeToFit style={{ flexShrink: 1, fontSize: 17, color: C.cover }}>Colocar as vacinas na agenda</T>
+            </Pressable>
+          </View>
+        )}
+
+        {/* ------------------------------------------------ Hoje */}
+        <View style={{ marginTop: 12, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <T v="serif" accessibilityRole="header" style={{ fontSize: 22, lineHeight: 28, color: C.cover }}>Hoje</T>
+          <Pressable accessibilityRole="button" accessibilityLabel="Novo lembrete" onPress={() => router.push(newReminderRoute() as never)}
+            style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 8, paddingRight: 4 }}>
+            <HomeIcon name="plus" size={18} color={C.cover} sw={2.6} />
+            <T v="xbold" style={{ fontSize: 17, color: C.cover }}>Lembrete</T>
+          </Pressable>
+        </View>
+
+        {emptyDay ? (
+          <View style={{ marginTop: 4, borderWidth: 2, borderStyle: 'dashed', borderColor: '#D9C9A6', borderRadius: 22, backgroundColor: 'rgba(251,246,234,0.7)', paddingVertical: 16, paddingHorizontal: 16, alignItems: 'center' }}>
+            <PawFill size={34} color={C.inkFaint} />
+            <T v="xbold" style={{ marginTop: 6, fontSize: 18, lineHeight: 24, textAlign: 'center' }}>Nada para hoje ainda</T>
+            <T v="bold" style={{ fontSize: 16, lineHeight: 22, color: C.inkSoft, textAlign: 'center' }}>{`Adicione a comida e o passeio ${a.do} ${pet.name}`}</T>
+            <View style={{ marginTop: 12, flexDirection: 'row', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <AddChip label="Comida" onPress={() => router.push(newReminderRoute('comida') as never)} />
+              <AddChip label="Passeio" onPress={() => router.push(newReminderRoute('passeio') as never)} />
+            </View>
+          </View>
+        ) : (
+          <View>
+            {pending.map((it, i) => (
+              <TodayRow key={it.key} it={it} last={i === pending.length - 1 && !done.length} onPress={() => act(it)} />
+            ))}
+            {!pending.length && !v.agora ? (
+              <View style={{ minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderColor: '#E6D8BA' }}>
+                <HomeIcon name="check" size={22} color={C.green} sw={2.6} />
+                <T v="bold" style={{ flex: 1, fontSize: 17, color: C.green }}>{`Tudo feito hoje! ${a.O} ${pet.name} agradece.`}</T>
+              </View>
+            ) : null}
+            {done.length ? (
+              <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDone }} accessibilityLabel={`${done.length} ${done.length === 1 ? 'feito' : 'feitos'} hoje. ${showDone ? 'Esconder' : 'Mostrar'}`} onPress={() => setShowDone(!showDone)}
+                style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <View style={{ width: 50, alignItems: 'flex-start' }}>
+                  <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: C.greenPale, alignItems: 'center', justifyContent: 'center' }}><HomeIcon name="check" size={15} color={C.green} sw={2.6} /></View>
+                </View>
+                <T v="bold" numberOfLines={1} style={{ flex: 1, fontSize: 17, color: C.inkSoft }}>{`${done.length} ${done.length === 1 ? 'feito' : 'feitos'} hoje`}</T>
+                <HomeIcon name={showDone ? 'up' : 'down'} size={20} color={C.inkSoft} sw={2.2} />
+              </Pressable>
+            ) : null}
+            {showDone && done.map((it) => (
+              <TodayRow key={it.key} it={it} onPress={() => useApp.getState().unmarkTodayItem(it)} />
+            ))}
+          </View>
+        )}
+        <Pressable accessibilityRole="button" onPress={() => setEditRoutine(true)} style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 }}>
+          <HomeIcon name="edit" size={18} color={C.cover} />
+          <T v="bold" style={{ fontSize: 16, color: C.cover }}>Mudar horários do dia</T>
+        </Pressable>
+
+        {/* ------------------------------------------------ mais (funções da v1.0 que continuam acessíveis) */}
+        <T v="serif" accessibilityRole="header" style={{ fontSize: 22, lineHeight: 28, color: C.cover, marginTop: 18, marginBottom: 6 }}>{`Mais ${a.do} ${pet.name}`}</T>
+        <View style={{ backgroundColor: C.sheet, borderRadius: 22, overflow: 'hidden' }}>
+          <MoreRow icon="doc" label="Resumo para o veterinário" onPress={() => router.push('/dossie')} />
+          <MoreRow icon="suitcase" label="Vou viajar" onPress={() => router.push('/viagem')} />
+          <MoreRow icon="shield" label="Saúde da raça" onPress={() => router.push('/raca')} />
+          <MoreRow icon="stamp" label="Carimbos e conquistas" onPress={() => router.push('/vistos')} />
+          <MoreRow icon="bag" label="Loja de milhas" onPress={() => router.push('/duty-free')} />
+          <MoreRow icon="gear" label="Ajustes" onPress={() => router.push('/ajustes')} last />
+        </View>
+      </ScrollView>
+
+      <WalkSheet visible={!!walkItem} petName={`${a.do} ${pet.name}`} onClose={() => setWalkItem(null)}
+        onPick={(m) => { const it = walkItem; setWalkItem(null); if (it) mark(it, m); }} />
+      {editRoutine && <RoutineEditor routine={routineOf(pet)} species={pet.species} onClose={() => setEditRoutine(false)} />}
+    </View>
+  );
+}
+
+// ------------------------------------------------------------------ peças
+function Ring({ ratio }: { ratio: number }) {
+  const c = 2 * Math.PI * 7.5;
+  return (
+    <Svg width={20} height={20} viewBox="0 0 20 20">
+      <Circle cx={10} cy={10} r={7.5} fill="none" stroke={C.greenPale} strokeWidth={3} />
+      {ratio > 0 ? <Circle cx={10} cy={10} r={7.5} fill="none" stroke={C.green} strokeWidth={3} strokeLinecap="round" strokeDasharray={`${c * Math.min(1, ratio)} ${c}`} rotation={-90} origin="10, 10" /> : null}
+    </Svg>
+  );
+}
+
+function Stat({ value, label, onPress }: { value: string; label: string; onPress?: () => void }) {
+  return (
+    <Pressable accessibilityRole={onPress ? 'button' : 'text'} accessibilityLabel={`${label}: ${value === '—' ? 'sem registro' : value}`} disabled={!onPress} onPress={onPress}
+      style={({ pressed }) => ({ flex: 1, minWidth: 0, minHeight: 50, borderRadius: 14, backgroundColor: pressed ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center', paddingVertical: 4 })}>
+      <T v="xbold" numberOfLines={1} adjustsFontSizeToFit style={{ fontSize: 17, lineHeight: 21, color: C.cover }}>{value}</T>
+      <T v="bold" numberOfLines={1} style={{ fontSize: 14, lineHeight: 18, color: C.inkSoft }}>{label}</T>
+    </Pressable>
+  );
+}
+
+function Bubble({ label, icon, bg, fg, onPress }: { label: string; icon: HomeIconName; bg: string; fg: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => ({ width: 78, alignItems: 'center', gap: 6, opacity: pressed ? 0.8 : 1 })}>
+      <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
+        <HomeIcon name={icon} size={28} color={fg} />
       </View>
-      <Toggle on={!!r.playTime} label="Hora de brincar" sub={r.playTime ? `Todo dia às ${r.playTime}` : 'Desligado'} onPress={() => setR({ ...r, playTime: r.playTime ? null : '20:00' })} />
-      <Toggle on={r.water} label="Trocar a água" sub="Uma vez por dia" onPress={() => setR({ ...r, water: !r.water })} />
-      <Toggle on={r.teeth} label="Escovar os dentes" sub="Previne tártaro" onPress={() => setR({ ...r, teeth: !r.teeth })} />
-      {species === 'cat' && <Toggle on={r.litter} label="Limpar a caixa de areia" sub="Todo dia" onPress={() => setR({ ...r, litter: !r.litter })} />}
-      <Button label="Salvar rotina" icon="check" onPress={async () => { await useApp.getState().setRoutine(r); onClose(); }} />
-    </Sheet>
+      <T v="xbold" numberOfLines={1} style={{ fontSize: 16, lineHeight: 20, color: C.ink }}>{label}</T>
+    </Pressable>
+  );
+}
+
+function AgoraCard({ ag, now, onAct, onOpenDose }: { ag: Agora; now: Date; onAct: () => void; onOpenDose: () => void }) {
+  const it = ag.item;
+  const late = ag.state === 'atrasado';
+  const lateMed = late && it.kind === 'remedio' && it.source.type === 'dose';
+  let badge = ag.badge;
+  if (!late) {
+    if (ag.state === 'agora') badge = 'AGORA';
+    else if (it.time) {
+      const [h, m] = it.time.split(':').map(Number);
+      const diff = h * 60 + m - (now.getHours() * 60 + now.getMinutes());
+      badge = `PRÓXIMO · ${inLabel(diff)}`;
+    } else badge = 'HOJE';
+  }
+  const title = `${it.title}${it.time && !late ? ` · ${it.time}` : ''}`;
+  const btn = lateMed ? 'Dar agora' : ag.action;
+  const btnLabel = `${ag.action === 'Dar' ? 'Dar' : 'Marcar como feito'}: ${it.title}`;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${badge.toLowerCase()}. ${title}`} disabled={!lateMed} onPress={onOpenDose}
+      style={{
+        marginTop: 12, minHeight: 76, borderRadius: 22, paddingVertical: 12, paddingLeft: late ? 12 : 16, paddingRight: 14,
+        flexDirection: 'row', alignItems: 'center', gap: 12,
+        backgroundColor: late ? C.redPale : C.cover, borderLeftWidth: late ? 6 : 0, borderLeftColor: C.red,
+        shadowColor: late ? C.red : C.cover, shadowOpacity: late ? 0.14 : 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 8 }, elevation: 4,
+      }}>
+      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: late ? C.white : C.amberPale, alignItems: 'center', justifyContent: 'center' }}>
+        <HomeIcon name={kindIcon(it)} size={24} color={late ? C.red : '#7A5204'} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <T v="monoBold" numberOfLines={1} style={{ fontSize: 12, lineHeight: 17, letterSpacing: 1, color: late ? '#8E2A1B' : C.goldLight }}>{badge}</T>
+        <T v="xbold" numberOfLines={1} style={{ fontSize: 18, lineHeight: 24, color: late ? C.ink : C.white }}>{title}</T>
+      </View>
+      <Pressable accessibilityRole="button" accessibilityLabel={lateMed ? `Dar ${it.title} agora` : btnLabel} onPress={onAct} hitSlop={4}
+        style={({ pressed }) => ({ minHeight: 48, minWidth: late ? 96 : 76, borderRadius: 24, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: late ? (pressed ? C.coralInk : C.red) : (pressed ? C.paper : C.white) })}>
+        <T v="xbold" numberOfLines={1} style={{ fontSize: 16, color: late ? C.white : C.cover }}>{btn}</T>
+      </Pressable>
+    </Pressable>
+  );
+}
+
+function NextVaccineCard({ name, date, days, late }: { name: string; date: string; days: number; late: boolean }) {
+  const d = fromDay(date);
+  const mon = MONTH_NAMES[d.getMonth()].slice(0, 3).toUpperCase();
+  const wd = WEEKDAY_NAMES[d.getDay()];
+  const when = late ? `atrasada há ${-days} ${days === -1 ? 'dia' : 'dias'}` : days === 0 ? 'hoje' : days === 1 ? 'amanhã' : `em ${days} dias`;
+  const title = /^vacina/i.test(name) ? name : `Vacina ${name}`;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`Próxima vacina: ${name}, ${wd} ${d.getDate()} de ${MONTH_NAMES[d.getMonth()]}, ${when}`} onPress={() => router.push(AGENDA_VACINAS as never)}
+      style={({ pressed }) => ({ marginTop: 14, minHeight: 72, borderRadius: 22, backgroundColor: late ? C.redPale : pressed ? '#E6DCEE' : C.purplePale, paddingLeft: 10, paddingRight: 14, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 12 })}>
+      <View style={{ width: 52, height: 58, borderRadius: 10, backgroundColor: C.white, overflow: 'hidden', alignItems: 'center', shadowColor: C.purpleInk, shadowOpacity: 0.15, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1 }}>
+        <View style={{ height: 18, alignSelf: 'stretch', backgroundColor: late ? C.red : C.purple, alignItems: 'center', justifyContent: 'center' }}>
+          <T v="monoBold" style={{ fontSize: 12, lineHeight: 16, color: C.white, letterSpacing: 1 }}>{mon}</T>
+        </View>
+        <T v="serif" style={{ fontSize: 26, lineHeight: 38, color: late ? C.red : C.purpleInk }}>{String(d.getDate())}</T>
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <T v="xbold" numberOfLines={1} style={{ fontSize: 18, lineHeight: 24 }}>{title}</T>
+        <T v="bold" numberOfLines={1} style={{ fontSize: 16, lineHeight: 21, color: late ? C.red : C.purpleInk }}>{`${wd} · ${when}`}</T>
+      </View>
+      <HomeIcon name="chevron" size={22} color={late ? C.red : C.purpleInk} sw={2.4} />
+    </Pressable>
+  );
+}
+
+function TodayRow({ it, onPress, last }: { it: TodayItem; onPress: () => void; last?: boolean }) {
+  const late = !it.done && it.status === 'atrasado';
+  const label = it.done
+    ? `${it.title}${it.time ? ` às ${it.time}` : ''}: ${it.status === 'pulado' ? 'pulado' : 'feito'}. Tocar para desfazer`
+    : `${it.title}${it.time ? ` às ${it.time}` : ''}${late ? ', atrasado' : ''}. Tocar para marcar como feito`;
+  return (
+    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: it.done }} accessibilityLabel={label} onPress={onPress}
+      style={({ pressed }) => ({ minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 14, borderBottomWidth: last ? 0 : 1, borderColor: '#E6D8BA', backgroundColor: pressed ? 'rgba(239,227,200,0.6)' : 'transparent' })}>
+      <T v="mono" style={{ width: 52, fontSize: 15, color: late ? C.red : C.inkSoft }}>{it.time ?? '—'}</T>
+      <HomeIcon name={kindIcon(it)} size={22} color={it.done ? C.inkFaint : C.cover} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <T v="xbold" numberOfLines={1} style={{ fontSize: 17, color: it.done ? C.inkSoft : C.ink, textDecorationLine: it.done ? 'line-through' : 'none' }}>{it.title}</T>
+        {late ? <T v="bold" numberOfLines={1} style={{ fontSize: 15, color: C.red }}>Passou do horário</T> : null}
+      </View>
+      <View style={{ width: 30, height: 30, borderRadius: 15, borderWidth: 2.5, borderColor: it.done ? C.green : C.inkFaint, backgroundColor: it.done ? C.green : C.white, alignItems: 'center', justifyContent: 'center' }}>
+        {it.done ? <HomeIcon name="check" size={16} color={C.white} sw={3} /> : null}
+      </View>
+    </Pressable>
+  );
+}
+
+function AddChip({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`Adicionar ${label.toLowerCase()}`} onPress={onPress}
+      style={({ pressed }) => ({ minHeight: 48, borderWidth: 2, borderColor: C.cover, borderRadius: 24, backgroundColor: pressed ? C.paper2 : C.white, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 6 })}>
+      <HomeIcon name="plus" size={16} color={C.cover} sw={2.8} />
+      <T v="xbold" style={{ fontSize: 16, color: C.cover }}>{label}</T>
+    </Pressable>
+  );
+}
+
+function MoreRow({ icon, label, onPress, last }: { icon: HomeIconName; label: string; onPress: () => void; last?: boolean }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
+      style={({ pressed }) => ({ minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, borderBottomWidth: last ? 0 : 1, borderColor: '#E6D8BA', backgroundColor: pressed ? C.paper2 : 'transparent' })}>
+      <HomeIcon name={icon} size={22} color={C.cover} />
+      <T v="bold" style={{ flex: 1, fontSize: 17 }}>{label}</T>
+      <HomeIcon name="chevron" size={18} color={C.inkSoft} sw={2.4} />
+    </Pressable>
   );
 }

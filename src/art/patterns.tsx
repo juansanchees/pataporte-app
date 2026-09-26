@@ -189,3 +189,25 @@ export function PageDecor({ w, h, seed = 1, band = true, watermark = true, tone 
     </Svg>
   );
 }
+
+/**
+ * v1.1 — fundo "papel de passaporte": anéis finos concêntricos (guilloché simples dos mockups novos).
+ * Sem toque (pointerEvents none).
+ */
+export function PaperRings({ w, h, cx = w / 2, cy = h * 0.42, gap = 11, color = C.paper2, opacity = 0.55 }: {
+  w: number; h: number; cx?: number; cy?: number; gap?: number; color?: string; opacity?: number;
+}) {
+  const rings = useMemo(() => {
+    const R = Math.hypot(Math.max(cx, w - cx), Math.max(cy, h - cy));
+    const out: number[] = [];
+    for (let r = gap; r < R; r += gap) out.push(r);
+    return out;
+  }, [w, h, cx, cy, gap]);
+  return (
+    <Svg width={w} height={h} style={{ position: 'absolute', left: 0, top: 0 }} pointerEvents="none">
+      <G opacity={opacity}>
+        {rings.map((r) => <Circle key={r} cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={1} />)}
+      </G>
+    </Svg>
+  );
+}

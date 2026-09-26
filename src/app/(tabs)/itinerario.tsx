@@ -1,184 +1,152 @@
-import { careWords } from '@/domain/catalog';
 import React, { useMemo, useState } from 'react';
-import { Pressable, View } from 'react-native';
-import { router } from 'expo-router';
+import { Pressable, ScrollView, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useActivePet, useApp } from '@/store/app';
-import { EmptyState, Page, PageHeader } from '@/components/passport';
-import { Chip, IconButton, SectionTitle, T } from '@/components/ui';
-import { Icon } from '@/art/Icon';
-import { careStatus, timeline } from '@/domain/itinerary';
-import { monthTitle } from '@/domain/diary';
-import { addDays, diffDays, fmtBR, today, weekdayShort } from '@/domain/dates';
-import { CATEGORY_LABEL } from '@/domain/catalog';
-import type { Care } from '@/domain/types';
-import { C } from '@/theme';
+import { T } from '@/components/ui';
+import { HomeIcon, type HomeIconName } from '@/art/icons-home';
+import { newReminderRoute } from '@/components/v11/home/routes';
+import { agendaByMonth, type AgendaEvent, type AgendaFilter, type AgendaKind, type DueStatus } from '@/domain/today';
+import { careWords } from '@/domain/catalog';
+import { today } from '@/domain/dates';
 import { art } from '@/domain/words';
+import { C } from '@/theme';
 
-/** Janela em que um cuidado já "falta tomar". */
-const SOON_DAYS = 7;
+/**
+ * Aba Agenda (Aba-Agenda): lista por mês, estilo agenda do celular.
+ * Cores com texto: ATRASADO (vermelho) · ESTE MÊS (âmbar) · EM DIA (verde).
+ * Aceita ?filtro=vacinas|remedios (atalhos da Home).
+ */
+const FILTERS: { id: AgendaFilter; label: string }[] = [
+  { id: 'tudo', label: 'Tudo' },
+  { id: 'vacinas', label: 'Vacinas' },
+  { id: 'remedios', label: 'Remédios' },
+];
 
-function monthsFrom(day: string, n: number): string[] {
-  const [y, m] = day.split('-').map(Number);
-  return Array.from({ length: n }, (_, i) => {
-    const mm = ((m - 1 + i) % 12) + 1;
-    const yy = y + Math.floor((m - 1 + i) / 12);
-    return `${yy}-${String(mm).padStart(2, '0')}`;
-  });
+const STATUS: Record<DueStatus, { fg: string; bg: string; label: string }> = {
+  atrasado: { fg: C.red, bg: C.redPale, label: 'ATRASADO' },
+  este_mes: { fg: C.amber, bg: C.amberPale, label: 'ESTE MÊS' },
+  em_dia: { fg: C.green, bg: C.greenPale, label: 'EM DIA' },
+};
+
+const KIND_ICON: Record<AgendaKind, HomeIconName> = {
+  vacina: 'syringe', vermifugo: 'pill', antipulgas: 'shield', remedio: 'pill', exame: 'vet', consulta: 'vet', banho: 'bath', outro: 'agenda',
+};
+
+function StatusPill({ s }: { s: DueStatus }) {
+  const st = STATUS[s];
+  return (
+    <View style={{ borderRadius: 999, backgroundColor: st.bg, paddingHorizontal: 9, paddingVertical: 4 }}>
+      <T v="monoBold" numberOfLines={1} style={{ fontSize: 12, lineHeight: 16, letterSpacing: 1, color: st.fg }}>{st.label}</T>
+    </View>
+  );
 }
 
-export default function Vacinas() {
+export default function Agenda() {
   const pet = useActivePet();
-  const cares = useApp((s) => s.data.cares);
-  const [view, setView] = useState<'situacao' | 'cronograma'>('situacao');
-  const [onlyVac, setOnlyVac] = useState(true);
+  const data = useApp((s) => s.data);
+  const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ filtro?: string }>();
+  // atalho da Home: /itinerario?filtro=vacinas. A escolha do usuário vale enquanto o atalho não mudar.
+  const fromParam: AgendaFilter = params.filtro === 'vacinas' || params.filtro === 'remedios' ? params.filtro : 'tudo';
+  const [picked, setPicked] = useState<{ f: AgendaFilter; param?: string } | null>(null);
+  const filter: AgendaFilter = picked && picked.param === params.filtro ? picked.f : fromParam;
+  const setFilter = (f: AgendaFilter) => setPicked({ f, param: params.filtro });
   const t = today();
 
-  const { falta, tomou, next } = useMemo(() => {
-    const falta: Care[] = [];
-    const tomou: Care[] = [];
-    for (const c of cares) {
-      const due = c.active && c.nextDate ? diffDays(t, c.nextDate) : null;
-      if (!c.lastDate || (due !== null && due <= SOON_DAYS)) falta.push(c);
-      else tomou.push(c);
-    }
-    falta.sort((a, b) => (a.nextDate ?? '9').localeCompare(b.nextDate ?? '9'));
-    tomou.sort((a, b) => (b.lastDate ?? '').localeCompare(a.lastDate ?? ''));
-    const next = [...cares].filter((c) => c.active && c.nextDate && c.category === 'vacina').sort((a, b) => a.nextDate!.localeCompare(b.nextDate!))[0];
-    return { falta, tomou, next };
-  }, [cares, t]);
-
-  const months = useMemo(() => {
-    const list = timeline(cares.filter((c) => !onlyVac || c.category === 'vacina'), t, 12);
-    const ms = monthsFrom(t, 12);
-    const map = new Map<string, { care: Care; day: string }[]>();
-    // atrasadas de meses passados aparecem no mês atual
-    list.forEach((m) => { const k = m.month < ms[0] ? ms[0] : m.month; map.set(k, [...(map.get(k) ?? []), ...m.items]); });
-    return ms.map((m) => ({ month: m, items: map.get(m) ?? [] }));
-  }, [cares, onlyVac, t]);
-
+  const groups = useMemo(() => (pet ? agendaByMonth({ data }, pet, t, filter) : []), [pet, data, t, filter]);
   if (!pet) return null;
-  const open = (c: Care) => router.push({ pathname: '/cuidado/[id]', params: { id: c.id } });
-  const stamp = (c: Care) => useApp.getState().askStamp(c.id);
+  const a = art(pet);
+
+  const open = (e: AgendaEvent) => {
+    if (e.careId) router.push({ pathname: '/cuidado/[id]', params: { id: e.careId } });
+  };
+  const careOf = (e: AgendaEvent) => (e.careId ? data.cares.find((c) => c.id === e.careId) : undefined);
 
   return (
-    <Page seed={17}
-      header={
-        <View>
-          <PageHeader title="Vacinas e cuidados" eyebrow={`CARTEIRA ${art(pet).DO} ${pet.name.toUpperCase()}`} back={false} right={<IconButton icon="plus" tone="cover" label="Novo cuidado" onPress={() => router.push('/novo-cuidado')} />} />
-          <View style={{ flexDirection: 'row', marginHorizontal: 24, marginBottom: 12, backgroundColor: C.paper2, borderRadius: 12, padding: 4 }}>
-            {(['situacao', 'cronograma'] as const).map((v) => (
-              <Pressable key={v} accessibilityRole="tab" accessibilityState={{ selected: view === v }} onPress={() => setView(v)}
-                style={{ flex: 1, minHeight: 42, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: view === v ? C.cover : 'transparent' }}>
-                <T v="bold" style={{ fontSize: 15, color: view === v ? C.goldPale : C.inkSoft }}>{v === 'situacao' ? 'Feito × Falta' : 'Cronograma do ano'}</T>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      }>
-      {view === 'situacao' ? (
-        <View style={{ gap: 14 }}>
-          {next ? (
-            <Pressable accessibilityRole="button" onPress={() => open(next)} style={{ backgroundColor: C.cover, borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-              <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(221,189,126,0.18)', alignItems: 'center', justifyContent: 'center' }}><Icon name="drop" size={26} color={C.goldLight} /></View>
-              <View style={{ flex: 1 }}>
-                <T v="bold" style={{ color: C.goldLight, fontSize: 15 }}>{next.nextDate! < t ? 'VACINA ATRASADA' : 'PRÓXIMA VACINA'}</T>
-                <T v="serif" style={{ color: C.goldPale, fontSize: 22, lineHeight: 26 }} numberOfLines={2}>{next.name}</T>
-                <T v="bold" style={{ color: C.goldPale, fontSize: 15 }}>{`${fmtBR(next.nextDate!)} · ${whenText(t, next.nextDate!)}`}</T>
-              </View>
-            </Pressable>
-          ) : null}
+    <View style={{ flex: 1, backgroundColor: C.paper }}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 18, paddingHorizontal: 20, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+        <T v="serif" accessibilityRole="header" numberOfLines={2} style={{ fontSize: 32, lineHeight: 38 }}>{`Agenda ${a.do} ${pet.name}`}</T>
 
-          <SectionTitle>{`Falta fazer · ${falta.length}`}</SectionTitle>
-          {falta.length === 0 ? (
-            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: C.greenPale, borderRadius: 14, padding: 14 }}>
-              <Icon name="check" size={22} color={C.green} sw={3} />
-              <T v="bold" style={{ flex: 1, color: C.green, fontSize: 15 }}>{`Nada pendente nos próximos ${SOON_DAYS} dias. ${art(pet).O} ${pet.name} está em dia!`}</T>
-            </View>
-          ) : falta.map((c) => {
-            const st = careStatus(c, t);
-            const late = st === 'atrasado';
-            const line = !c.nextDate ? 'Sem data' : late ? `Em atraso desde ${fmtBR(c.nextDate)}` : `Até ${fmtBR(c.nextDate)} · ${whenText(t, c.nextDate)}`;
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 14, flexWrap: 'wrap' }} accessibilityRole="tablist">
+          {FILTERS.map((f) => {
+            const on = filter === f.id;
             return (
-              <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${c.name}. ${line}`} onPress={() => open(c)}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.sheet, borderWidth: 1, borderColor: late ? C.red : C.line, borderLeftWidth: 5, borderLeftColor: late ? C.red : C.amber, borderRadius: 14, padding: 14 }}>
-                <View style={{ flex: 1, gap: 3 }}>
-                  <T style={{ fontSize: 14, color: C.inkSoft }}>{CATEGORY_LABEL[c.category]}</T>
-                  <T v="xbold" style={{ fontSize: 17 }}>{c.name}</T>
-                  <T v="bold" style={{ fontSize: 14.5, color: late ? C.red : C.amber }}>{line}</T>
-                  {!c.lastDate ? <T style={{ fontSize: 15, color: C.inkSoft }}>Ainda sem registro</T> : <T style={{ fontSize: 15, color: C.inkSoft }}>{`Última: ${fmtBR(c.lastDate)}`}</T>}
-                </View>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Carimbar ${c.name}`} onPress={() => stamp(c)}
-                  style={({ pressed }) => ({ minHeight: 48, paddingHorizontal: 12, borderRadius: 10, backgroundColor: C.coralInk, borderBottomWidth: 4, borderBottomColor: '#7C2A1A', alignItems: 'center', justifyContent: 'center', gap: 2, transform: [{ scale: pressed ? 0.95 : 1 }] })}>
-                  <Icon name="stamp" size={16} color="#fff" sw={2.2} />
-                  <T v="bold" style={{ color: '#fff', fontSize: 15 }}>{careWords(c.category).done}</T>
-                </Pressable>
+              <Pressable key={f.id} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => setFilter(f.id)}
+                style={({ pressed }) => ({ minHeight: 48, paddingHorizontal: 18, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? C.cover : pressed ? C.paper2 : C.sheet, borderWidth: on ? 0 : 2, borderColor: C.line })}>
+                <T v="xbold" style={{ fontSize: 16, color: on ? C.white : C.inkSoft }}>{f.label}</T>
               </Pressable>
             );
           })}
-
-          <SectionTitle>{`Em dia · ${tomou.length}`}</SectionTitle>
-          {tomou.length === 0 ? <T style={{ color: C.inkSoft, fontSize: 14.5 }}>Quando você marcar uma vacina ou cuidado, ele aparece aqui com a data e a próxima vez.</T> : tomou.map((c) => (
-            <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${c.name}, feito em ${fmtBR(c.lastDate!)}`} onPress={() => open(c)}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.sheet, borderWidth: 1, borderColor: C.line, borderLeftWidth: 5, borderLeftColor: C.green, borderRadius: 14, padding: 14 }}>
-              <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center' }}><Icon name="check" size={18} color="#fff" sw={3} /></View>
-              <View style={{ flex: 1, gap: 2 }}>
-                <T v="xbold" style={{ fontSize: 16.5 }}>{c.name}</T>
-                <T v="bold" style={{ fontSize: 14.5, color: C.green }}>{`${c.category === 'exame' || c.category === 'outro' ? 'Feito' : c.category === 'antiparasitario' ? 'Aplicado' : 'Tomou'} em ${fmtBR(c.lastDate!)}`}</T>
-                <T style={{ fontSize: 14, color: C.inkSoft }}>{c.nextDate ? `Próxima: ${fmtBR(c.nextDate)} · ${whenText(t, c.nextDate)}` : 'Dose única: concluída'}</T>
-              </View>
-              <Icon name="chevron" size={18} color={C.inkSoft} />
-            </Pressable>
-          ))}
-          {cares.length === 0 && <EmptyState title="Carteira vazia" text="Adicione as vacinas e remédios do seu pet." action="Adicionar cuidado" onAction={() => router.push('/novo-cuidado')} />}
         </View>
-      ) : (
-        <View style={{ gap: 12 }}>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Chip label="Só vacinas" on={onlyVac} onPress={() => setOnlyVac(true)} style={{ flex: 1, justifyContent: 'center' }} />
-            <Chip label="Todos" on={!onlyVac} onPress={() => setOnlyVac(false)} style={{ flex: 1, justifyContent: 'center' }} />
+
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 14, flexWrap: 'wrap' }} accessibilityLabel="Legenda: vermelho atrasado, amarelo este mês, verde em dia">
+          <StatusPill s="atrasado" /><StatusPill s="este_mes" /><StatusPill s="em_dia" />
+        </View>
+
+        {groups.length === 0 ? (
+          <View style={{ marginTop: 20, borderWidth: 2, borderStyle: 'dashed', borderColor: '#D9C9A6', borderRadius: 22, backgroundColor: 'rgba(251,246,234,0.7)', padding: 18, alignItems: 'center', gap: 8 }}>
+            <HomeIcon name="agenda" size={34} color={C.inkSoft} />
+            <T v="xbold" style={{ fontSize: 18, textAlign: 'center' }}>Nada marcado ainda</T>
+            <T v="bold" style={{ fontSize: 16, lineHeight: 22, color: C.inkSoft, textAlign: 'center' }}>
+              {filter === 'remedios' ? `Os remédios ${a.do} ${pet.name} aparecem aqui.` : `Coloque as vacinas ${a.do} ${pet.name} e o app avisa quando for a hora.`}
+            </T>
+            <Pressable accessibilityRole="button" onPress={() => router.push(filter === 'remedios' ? (newReminderRoute('remedio') as never) : '/novo-cuidado')}
+              style={({ pressed }) => ({ marginTop: 6, minHeight: 52, borderRadius: 26, backgroundColor: pressed ? C.coverDark : C.cover, paddingHorizontal: 22, flexDirection: 'row', alignItems: 'center', gap: 8 })}>
+              <HomeIcon name="plus" size={18} color={C.white} sw={2.6} />
+              <T v="xbold" style={{ fontSize: 17, color: C.white }}>{filter === 'remedios' ? 'Adicionar remédio' : 'Adicionar vacina'}</T>
+            </Pressable>
           </View>
-          <T style={{ fontSize: 14.5, color: C.inkSoft }}>{`Os próximos 12 meses ${art(pet).do} ${pet.name}, mês a mês.`}</T>
-          {months.map((m) => {
-            const empty = m.items.length === 0;
-            return (
-              <View key={m.month} style={{ backgroundColor: empty ? 'transparent' : C.sheet, borderWidth: 1, borderStyle: empty ? 'dashed' : 'solid', borderColor: C.line, borderRadius: 14, overflow: 'hidden' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: empty ? 'transparent' : C.cover }}>
-                  <T v="serif" style={{ fontSize: 19, color: empty ? C.inkSoft : C.goldPale }}>{monthTitle(m.month)}</T>
-                  <T v="bold" style={{ fontSize: 14, color: empty ? C.inkSoft : C.goldLight }}>{empty ? (onlyVac ? 'Sem vacinas' : 'Nada marcado') : `${m.items.length} ${onlyVac ? (m.items.length === 1 ? 'vacina' : 'vacinas') : (m.items.length === 1 ? 'cuidado' : 'cuidados')}`}</T>
-                </View>
-                {m.items.map((it, i) => {
-                  const late = it.day < t;
+        ) : (
+          <View style={{ marginTop: 6 }}>
+            {groups.map((g) => (
+              <View key={g.id}>
+                <T v="monoBold" accessibilityRole="header" style={{ fontSize: 13, letterSpacing: 1.5, textTransform: 'uppercase', color: g.id === 'atrasados' ? C.red : C.inkSoft, paddingTop: 12, paddingBottom: 2 }}>{g.title}</T>
+                {g.events.map((e) => {
+                  const care = careOf(e);
+                  // marcar como tomada: só na próxima dose prevista, se estiver atrasada ou for deste mês
+                  const canMark = !!care && care.nextDate === e.day && e.status !== 'em_dia';
+                  const st = STATUS[e.status];
                   return (
-                    <Pressable key={it.care.id + it.day} accessibilityRole="button" accessibilityLabel={`${it.day.slice(8)} de ${monthTitle(m.month)}: ${it.care.name}`} onPress={() => open(it.care)}
-                      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, minHeight: 56, borderTopWidth: i ? 1 : 0, borderStyle: 'dashed', borderColor: C.line }}>
-                      <View style={{ width: 46, alignItems: 'center' }}>
-                        <T v="serif" style={{ fontSize: 24, lineHeight: 26, color: late ? C.red : C.ink }}>{it.day.slice(8)}</T>
-                        <T v="mono" style={{ fontSize: 13, color: C.inkSoft }}>{weekdayShort(it.day)}</T>
+                    <Pressable key={e.key} accessibilityRole={e.careId ? 'button' : 'text'} disabled={!e.careId} onPress={() => open(e)}
+                      accessibilityLabel={`${e.dayNum}, ${e.weekday}: ${e.title}. ${e.sub}. ${e.statusLabel}`}
+                      style={({ pressed }) => ({ minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderColor: C.paper3, backgroundColor: pressed ? 'rgba(239,227,200,0.6)' : 'transparent', paddingVertical: 8 })}>
+                      <View style={{ width: 52, alignItems: 'center' }}>
+                        <T v="serif" style={{ fontSize: 26, lineHeight: 30 }}>{e.dayNum}</T>
+                        <T v="mono" style={{ fontSize: 13, color: C.inkSoft }}>{e.weekday}</T>
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <T v="bold" style={{ fontSize: 16 }}>{it.care.name}</T>
-                        {!onlyVac ? <T style={{ fontSize: 14.5, color: C.inkSoft }}>{CATEGORY_LABEL[it.care.category]}</T> : null}
+                      <View style={{ width: 4, alignSelf: 'stretch', marginVertical: 6, borderRadius: 2, backgroundColor: st.fg }} />
+                      <HomeIcon name={KIND_ICON[e.kind]} size={22} color={C.cover} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <T v="xbold" numberOfLines={2} style={{ fontSize: 18, lineHeight: 23 }}>{e.title}</T>
+                        <T numberOfLines={1} style={{ fontSize: 16, color: C.inkSoft }}>{e.sub}</T>
+                        {canMark && care ? (
+                          <Pressable accessibilityRole="button" accessibilityLabel={`${careWords(care.category).done}: ${care.name}`} onPress={() => useApp.getState().askStamp(care.id)} hitSlop={6}
+                            style={({ pressed }) => ({ alignSelf: 'flex-start', marginTop: 6, minHeight: 44, paddingHorizontal: 14, borderRadius: 22, backgroundColor: pressed ? C.coverDark : C.cover, flexDirection: 'row', alignItems: 'center', gap: 6 })}>
+                            <HomeIcon name="check" size={16} color={C.white} sw={3} />
+                            <T v="xbold" style={{ fontSize: 16, color: C.white }}>{careWords(care.category).done}</T>
+                          </Pressable>
+                        ) : null}
                       </View>
-                      {late ? <T v="bold" style={{ color: C.red, fontSize: 15 }}>Atrasada</T> : <Icon name="chevron" size={16} color={C.inkSoft} />}
+                      <StatusPill s={e.status} />
                     </Pressable>
                   );
                 })}
               </View>
-            );
-          })}
-          {!months.some((m) => m.items.some((it) => it.day <= addDays(t, 365))) && <T style={{ color: C.inkSoft }}>Nenhuma dose prevista. Carimbe as vacinas para o cronograma se montar sozinho.</T>}
-        </View>
-      )}
-    </Page>
-  );
-}
+            ))}
+            <Pressable accessibilityRole="button" onPress={() => router.push('/novo-cuidado')}
+              style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10 }}>
+              <HomeIcon name="syringe" size={20} color={C.cover} />
+              <T v="bold" style={{ fontSize: 16, color: C.cover }}>Adicionar vacina ou cuidado</T>
+            </Pressable>
+          </View>
+        )}
+      </ScrollView>
 
-function whenText(t: string, day: string): string {
-  const n = diffDays(t, day);
-  if (n === 0) return 'hoje';
-  if (n === 1) return 'amanhã';
-  if (n < 0) return `atrasada há ${-n} ${n === -1 ? 'dia' : 'dias'}`;
-  if (n < 60) return `em ${n} dias`;
-  const m = Math.round(n / 30);
-  return `em ${m} meses`;
+      <Pressable accessibilityRole="button" accessibilityLabel="Novo lembrete" onPress={() => router.push(newReminderRoute() as never)}
+        style={({ pressed }) => ({ position: 'absolute', right: 20, bottom: 16, width: 64, height: 64, borderRadius: 32, backgroundColor: pressed ? C.coverDark : C.cover, alignItems: 'center', justifyContent: 'center', shadowColor: C.coverDark, shadowOpacity: 0.35, shadowRadius: 7, shadowOffset: { width: 0, height: 6 }, elevation: 6 })}>
+        <HomeIcon name="plus" size={28} color={C.white} sw={2.5} />
+      </Pressable>
+    </View>
+  );
 }

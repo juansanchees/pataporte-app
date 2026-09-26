@@ -34,7 +34,7 @@ export default function Vistos() {
   const locked = v.specials.filter((s) => !s.unlocked);
 
   return (
-    <Page seed={26} header={<PageHeader title="Carimbos e conquistas" eyebrow={`CONQUISTAS ${art(pet).DO} ${pet.name.toUpperCase()}`} back={false} right={<IconButton icon="map" label="Mapa da jornada" onPress={() => router.push('/mapa')} />} />}>
+    <Page seed={26} header={<PageHeader title="Carimbos e conquistas" eyebrow={`CONQUISTAS ${art(pet).DO} ${pet.name.toUpperCase()}`} right={<IconButton icon="map" label="Mapa da jornada" onPress={() => router.push('/mapa')} />} />}>
       <View style={{ gap: 14 }}>
         <VisaSticker level={v.lv.n} name={v.lv.name} miles={v.total} />
         <View style={{ flexDirection: 'row', gap: 8 }}>
