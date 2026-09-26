@@ -1,97 +1,150 @@
-import React from 'react';
-import { View } from 'react-native';
+import React, { useRef } from 'react';
+import { Pressable, ScrollView, View } from 'react-native';
 import { router, Redirect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useActivePet, useApp } from '@/store/app';
-import { MilesBar, Page, PageHeader, PetAvatar } from '@/components/passport';
-import { Button, SectionTitle, T } from '@/components/ui';
-import { Icon } from '@/art/Icon';
-import { HOW_TO_EARN, LEVELS, levelFor, milesTotals, nextLevel } from '@/domain/gamification';
-import { accessoriesFor, itemById, PAID_PLANS } from '@/domain/commerce';
+import { T } from '@/components/ui';
+import { PIcon, PawSolid, type PremiumIconName } from '@/art/icons-premium';
+import { EARN_TABLE, REDEEM_COST, canRedeemMonth, milesSummary, seasonLevel, seasonName, type MilesReason } from '@/domain/gamification';
+import { PAID_PLANS } from '@/domain/commerce';
+import { fmtExtenso, today } from '@/domain/dates';
 import { art } from '@/domain/words';
+import { confirmAsk } from '@/services/confirm';
+import { LEVEL_TONE, TopBar, fmtMiles } from '@/components/v11/premium/common';
 import { C } from '@/theme';
 
-/** Como funcionam as milhas e os níveis: o que ganha, como sobe e o que cada nível dá. */
-export default function Mapa() {
+/** Mockup Milhas: hub das milhas (saldo, temporada, nível, atalhos, como ganhar e trocar). */
+const EARN_ICON: Record<MilesReason, { icon: PremiumIconName; color: string }> = {
+  vacina: { icon: 'syringe', color: C.purple },
+  remedio: { icon: 'pill', color: C.goldDark },
+  passeio: { icon: 'walk', color: '#2E6B41' },
+  foto_dia: { icon: 'camera', color: C.cover },
+  sequencia: { icon: 'calendarCheck', color: C.goldDark },
+  indicacao: { icon: 'friendPlus', color: C.purple },
+};
+
+const TILES: { label: string; icon: PremiumIconName; bg: string; color: string; go: 'mapa' | 'loja' | 'ranking' | 'trocar' }[] = [
+  { label: 'Viajar no mapa', icon: 'globePlane', bg: C.aquaPale, color: C.cover, go: 'mapa' },
+  { label: 'Loja do avatar', icon: 'bag', bg: C.purplePale, color: C.purple, go: 'loja' },
+  { label: 'Ranking', icon: 'podium', bg: C.goldPale, color: C.goldDark, go: 'ranking' },
+  { label: 'Trocar milhas', icon: 'ticket', bg: C.greenPale, color: '#2E6B41', go: 'trocar' },
+];
+
+export default function Milhas() {
   const pet = useActivePet();
   const ledger = useApp((s) => s.data.ledger);
-  const plan = useApp((s) => s.profile?.plan ?? 'economica');
+  const profile = useApp((s) => s.profile);
+  const plan = useApp((s) => s.plan());
+  const insets = useSafeAreaInsets();
+  const scroll = useRef<ScrollView>(null);
+  const redeemY = useRef(0);
   if (!pet) return <Redirect href="/" />;
-  const { total, balance } = milesTotals(ledger);
-  const cur = levelFor(total);
-  const nx = nextLevel(total);
+
+  const t = today();
+  const m = milesSummary(ledger, t);
+  const lv = seasonLevel(m.season);
+  const tone = LEVEL_TONE[lv.id];
+  const pct = lv.next ? Math.min(1, m.season / lv.next.min) : 1;
+  const check = canRedeemMonth(profile?.redemptions, new Date(), m.balance);
+  // Com a cobrança desligada todo mundo já tem tudo: a troca só fica ativa para testes (__DEV__).
+  const redeemOpen = PAID_PLANS || __DEV__;
+
+  const go = (g: (typeof TILES)[number]['go']) => {
+    if (g === 'mapa') router.push('/milhas/mapa' as never);
+    else if (g === 'loja') router.push('/duty-free');
+    else if (g === 'ranking') router.push('/milhas/ranking' as never);
+    else scroll.current?.scrollTo({ y: redeemY.current - 12, animated: true });
+  };
+
+  const redeem = async () => {
+    if (!check.ok) return;
+    const ok = await confirmAsk('Trocar 2.000 milhas?', `Você ganha 1 mês de Primeira Classe. Seu saldo fica em ${fmtMiles(m.balance - REDEEM_COST)} milhas. Dá para trocar 1 vez por ano.`, 'Trocar');
+    if (!ok) return;
+    const r = await useApp.getState().redeemMonth();
+    if (!r.ok) useApp.getState().showToast(r.reason === 'limite' ? 'Você já trocou milhas este ano.' : 'Saldo insuficiente.');
+  };
+
+  const redeemBtn = !redeemOpen ? { label: 'Em breve', on: false, a11y: 'Troca disponível em breve' }
+    : check.ok ? { label: 'Trocar', on: true, a11y: 'Trocar 2.000 milhas por 1 mês de Primeira Classe' }
+    : check.reason === 'limite' ? { label: 'Já trocou', on: false, a11y: 'Você já trocou este ano' }
+    : { label: `Faltam ${fmtMiles(check.missing ?? 0)}`, on: false, a11y: `Trocar: faltam ${fmtMiles(check.missing ?? 0)} milhas` };
+  const redeemSub = check.reason === 'limite' && check.availableAt ? `Próxima troca a partir de ${fmtExtenso(check.availableAt.slice(0, 10))}` : '1 vez por ano';
 
   return (
-    <Page seed={27} header={<PageHeader title="Milhas e níveis" eyebrow={`A JORNADA ${art(pet).DO} ${pet.name.toUpperCase()}`} />}
-      footer={<Button label="Ir para o Duty Free" icon="bag" onPress={() => router.push('/duty-free')} />}>
-      <View style={{ gap: 16 }}>
-        <View style={{ backgroundColor: C.cover, borderRadius: 16, padding: 16, gap: 12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-            <View style={{ width: 76, height: 88, borderRadius: 10, backgroundColor: C.photo, alignItems: 'center', justifyContent: 'flex-end', overflow: 'hidden' }}>
-              <PetAvatar pet={pet} size={84} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <T v="bold" style={{ color: C.goldLight, fontSize: 14.5 }}>{`NÍVEL ${cur.n} DE ${LEVELS.length}`}</T>
-              <T v="serif" style={{ color: C.goldPale, fontSize: 26, lineHeight: 30 }}>{cur.name}</T>
-              <T style={{ color: C.goldPale, fontSize: 14 }}>{`${total} milhas ganhas · ${balance} para gastar`}</T>
+    <View style={{ flex: 1, backgroundColor: C.paper }}>
+      <TopBar title={`Milhas ${art(pet).do} ${pet.name}`} />
+      <ScrollView ref={scroll} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: insets.bottom + 24 }} showsVerticalScrollIndicator={false}>
+        {/* SALDO */}
+        <View style={{ borderRadius: 24, backgroundColor: C.cover, padding: 18, paddingTop: 14, overflow: 'hidden', shadowColor: C.cover, shadowOpacity: 0.22, shadowRadius: 12, shadowOffset: { width: 0, height: 10 }, elevation: 4 }}>
+          <View pointerEvents="none" style={{ position: 'absolute', right: -18, bottom: -22, opacity: 0.08, transform: [{ rotate: '-18deg' }] }}><PawSolid size={120} color={C.goldPale} /></View>
+          <View style={{ paddingRight: 80 }}>
+            <T v="monoBold" numberOfLines={1} style={{ fontSize: 12, color: C.goldLight }}>{`SALDO · ${seasonName(t).toUpperCase()}`}</T>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }} accessible accessibilityLabel={`Saldo: ${fmtMiles(m.balance)} milhas para gastar`}>
+              <T v="serif" style={{ fontSize: 48, lineHeight: 54, color: '#FFFFFF' }}>{fmtMiles(m.balance)}</T>
+              <T v="xbold" style={{ fontSize: 18, color: C.goldPale }}>milhas</T>
             </View>
           </View>
-          <MilesBar dark cur={total - cur.min} total={(nx?.min ?? cur.min + 1) - cur.min} label={nx ? `Faltam ${nx.min - total} milhas para ${nx.name}` : 'Nível máximo alcançado!'} />
+          <View accessible accessibilityLabel={`Nível ${lv.name} na temporada`} style={{ position: 'absolute', right: 16, top: 14, width: 68, height: 68, borderRadius: 34, backgroundColor: tone.bg, borderWidth: 3, borderColor: tone.ring, alignItems: 'center', justifyContent: 'center' }}>
+            <PIcon name="crown" size={22} color={tone.fg} />
+            <T v="monoBold" style={{ fontSize: 12, lineHeight: 14, color: tone.fg }}>{lv.name.toUpperCase()}</T>
+          </View>
+          <View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: lv.next?.min ?? m.season, now: m.season }} style={{ marginTop: 10, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden' }}>
+            <View style={{ width: `${Math.round(pct * 100)}%`, height: 8, borderRadius: 4, backgroundColor: C.gold }} />
+          </View>
+          <T v="bold" style={{ marginTop: 6, fontSize: 16, color: '#FFFFFF' }}>
+            {lv.next ? <>faltam <T style={{ fontFamily: 'Nunito_900Black', color: C.goldLight, fontSize: 16 }}>{fmtMiles(lv.toNext)}</T> para {lv.next.name}</> : 'Nível máximo da temporada!'}
+          </T>
+          <T v="bold" style={{ marginTop: 2, fontSize: 15, color: C.goldLight }}>{`${fmtMiles(m.season)} milhas ganhas neste mês · ${fmtMiles(m.lifetime)} na vida`}</T>
+          {plan === 'primeira' && <T v="bold" style={{ marginTop: 2, fontSize: 15, color: C.goldLight }}>Primeira Classe: suas milhas valem em dobro</T>}
         </View>
 
-        <View style={{ backgroundColor: C.sheet, borderWidth: 1, borderColor: C.line, borderRadius: 16, padding: 16, gap: 8 }}>
-          <T v="xbold" style={{ fontSize: 17 }}>Como funciona</T>
-          {[
-            ['1', `Cada cuidado com ${art(pet).o} ${pet.name} vale milhas: vacinas, rotina do dia, diário, peso e perguntas ao Guia.`],
-            ['2', 'As milhas somadas fazem o pet subir de nível. Cada nível novo dá um presente para o avatar.'],
-            ['3', 'As milhas também podem ser trocadas no Duty Free por acessórios. Gastar não faz perder nível.'],
-          ].map(([n, t]) => (
-            <View key={n} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
-              <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: C.cover, alignItems: 'center', justifyContent: 'center' }}><T v="xbold" style={{ color: C.goldPale, fontSize: 14.5 }}>{n}</T></View>
-              <T style={{ flex: 1, fontSize: 15, lineHeight: 21 }}>{t}</T>
+        {/* ATALHOS */}
+        <View style={{ marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          {TILES.map((tile) => (
+            <Pressable key={tile.go} accessibilityRole="button" accessibilityLabel={tile.label} onPress={() => go(tile.go)}
+              style={({ pressed }) => ({ flexBasis: '47%', flexGrow: 1, minHeight: 76, borderWidth: 1, borderColor: C.line, borderRadius: 18, backgroundColor: C.sheet, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10, opacity: pressed ? 0.85 : 1 })}>
+              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: tile.bg, alignItems: 'center', justifyContent: 'center' }}><PIcon name={tile.icon} size={25} color={tile.color} /></View>
+              <T v="xbold" style={{ flex: 1, fontSize: 16, lineHeight: 20 }}>{tile.label}</T>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* COMO GANHAR */}
+        <T v="serif" accessibilityRole="header" style={{ marginTop: 18, fontSize: 21, color: C.cover }}>Como ganhar</T>
+        <View style={{ marginTop: 6, borderRadius: 18, backgroundColor: C.sheet, borderWidth: 1, borderColor: C.line, paddingHorizontal: 14 }}>
+          {EARN_TABLE.map((e, i) => (
+            <View key={e.reason} accessible accessibilityLabel={`${e.label}: mais ${e.miles} milhas`}
+              style={{ minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: i < EARN_TABLE.length - 1 ? 1 : 0, borderColor: '#E6D8BA' }}>
+              <PIcon name={EARN_ICON[e.reason].icon} size={22} color={EARN_ICON[e.reason].color} />
+              <T v="bold" style={{ flex: 1, fontSize: 16 }}>{e.label}</T>
+              <T v="monoBold" style={{ fontSize: 15, color: '#2E6B41' }}>{`+${fmtMiles(e.miles)}`}</T>
             </View>
           ))}
         </View>
 
-        <View>
-          <SectionTitle>Como ganhar milhas</SectionTitle>
-          <View style={{ backgroundColor: C.sheet, borderWidth: 1, borderColor: C.line, borderRadius: 14, paddingHorizontal: 14 }}>
-            {HOW_TO_EARN.map(([what, n], i) => (
-              <View key={what} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 50, borderTopWidth: i ? 1 : 0, borderStyle: 'dashed', borderColor: C.line }}>
-                <T style={{ flex: 1, fontSize: 14.5, lineHeight: 20 }}>{what}</T>
-                <View style={{ backgroundColor: C.aquaPale, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}><T v="monoBold" style={{ color: C.aquaInk, fontSize: 14.5 }}>{plan === 'economica' ? n : `${n} ×2`}</T></View>
+        {/* TROCAR POR */}
+        <View onLayout={(ev) => { redeemY.current = ev.nativeEvent.layout.y; }}>
+          <T v="serif" accessibilityRole="header" style={{ marginTop: 18, fontSize: 21, color: C.cover }}>Trocar por</T>
+          <View style={{ marginTop: 6, gap: 8 }}>
+            <View style={{ minHeight: 68, borderRadius: 18, backgroundColor: C.sheet, borderWidth: 1, borderColor: C.line, paddingLeft: 12, paddingRight: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.cover, alignItems: 'center', justifyContent: 'center' }}><PIcon name="planeUp" size={22} color={C.goldLight} /></View>
+              <View style={{ flex: 1 }}>
+                <T v="bold" style={{ fontSize: 16, lineHeight: 20 }}><T style={{ fontFamily: 'Nunito_900Black', color: C.goldDark, fontSize: 16 }}>2.000 milhas</T> → 1 mês de Primeira Classe</T>
+                <T v="bold" style={{ fontSize: 15, lineHeight: 19, color: C.inkSoft }}>{redeemSub}</T>
               </View>
-            ))}
-          </View>
-          {!PAID_PLANS ? null : plan === 'economica' ? <T style={{ fontSize: 15, color: C.inkSoft, marginTop: 6 }}>Na Primeira Classe todas as milhas valem em dobro.</T> : <T v="bold" style={{ fontSize: 15, color: C.green, marginTop: 6 }}>Sua classe ganha milhas em dobro.</T>}
-        </View>
-
-        <View>
-          <SectionTitle>Os níveis e os presentes</SectionTitle>
-          <View style={{ gap: 10 }}>
-            {LEVELS.map((l) => {
-              const done = total >= l.min;
-              const now = l.n === cur.n;
-              const reward = l.reward ? itemById(l.reward) : undefined;
-              return (
-                <View key={l.n} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: now ? C.purplePale : C.sheet, borderWidth: now ? 2 : 1, borderColor: now ? C.purple : C.line, borderRadius: 14, padding: 12, opacity: done || now ? 1 : 0.85 }}>
-                  <View style={{ width: 54, height: 62, borderRadius: 8, backgroundColor: done ? C.photo : C.paper2, alignItems: 'center', justifyContent: 'flex-end', overflow: 'hidden' }}>
-                    {reward ? <PetAvatar pet={pet} size={60} acc={accessoriesFor([reward.id])} /> : <PetAvatar pet={pet} size={60} acc={[]} />}
-                    {!done && <View style={{ position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: 10, backgroundColor: C.paper, alignItems: 'center', justifyContent: 'center' }}><Icon name="lock" size={12} color={C.inkSoft} /></View>}
-                  </View>
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <T v="xbold" style={{ fontSize: 16 }}>{`${l.n}. ${l.name}`}</T>
-                      {now ? <View style={{ backgroundColor: C.coralInk, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}><T v="bold" style={{ color: '#fff', fontSize: 13 }}>Você está aqui</T></View> : null}
-                    </View>
-                    <T style={{ fontSize: 15, color: C.inkSoft }}>{l.min === 0 ? 'Início' : `A partir de ${l.min} milhas`}</T>
-                    <T v="bold" style={{ fontSize: 14, lineHeight: 19, color: done ? C.green : C.ink }}>{done && reward ? `Conquistado: ${reward.name}` : l.perk}</T>
-                  </View>
-                </View>
-              );
-            })}
+              <Pressable accessibilityRole="button" accessibilityLabel={redeemBtn.a11y} accessibilityState={{ disabled: !redeemBtn.on }} onPress={redeemBtn.on ? redeem : undefined}
+                style={({ pressed }) => ({ minHeight: 48, borderRadius: 24, backgroundColor: redeemBtn.on ? C.cover : C.paper2, paddingHorizontal: 14, justifyContent: 'center', opacity: pressed && redeemBtn.on ? 0.85 : 1 })}>
+                <T v="xbold" style={{ fontSize: 15, color: redeemBtn.on ? '#FFFFFF' : C.inkSoft }}>{redeemBtn.label}</T>
+              </Pressable>
+            </View>
+            <View accessible accessibilityLabel="Cupons de pet shop parceiro. Em breve." style={{ minHeight: 64, borderRadius: 18, backgroundColor: C.sheet, borderWidth: 1, borderColor: C.line, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.purplePale, alignItems: 'center', justifyContent: 'center' }}><PIcon name="tag" size={22} color={C.purple} /></View>
+              <T v="bold" style={{ flex: 1, fontSize: 16 }}>Cupons de pet shop parceiro</T>
+              <View style={{ minHeight: 26, borderRadius: 13, backgroundColor: C.purplePale, paddingHorizontal: 10, justifyContent: 'center' }}><T v="monoBold" style={{ fontSize: 12, color: C.purpleInk }}>EM BREVE</T></View>
+            </View>
           </View>
         </View>
-      </View>
-    </Page>
+      </ScrollView>
+    </View>
   );
 }

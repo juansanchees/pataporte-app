@@ -1,4 +1,3 @@
-import { foodLabel } from '@/domain/catalog';
 import React, { useState } from 'react';
 import { Modal, Platform, Pressable, View } from 'react-native';
 import { router, Redirect } from 'expo-router';
@@ -9,7 +8,7 @@ import { IdPage } from '@/components/IdPage';
 import { IconButton, SectionTitle, T } from '@/components/ui';
 import { Icon, type IconName } from '@/art/Icon';
 import { levelFor, milesTotals, moodFor } from '@/domain/gamification';
-import { gramsPerMeal } from '@/domain/catalog';
+import { foodLabel, gramsPerMeal } from '@/domain/catalog';
 import { ageYears, today } from '@/domain/dates';
 import { pickImage } from '@/services/photos';
 import { C } from '@/theme';
@@ -48,8 +47,16 @@ export default function Perfil() {
     if (p) await useApp.getState().setPetPhoto(p.uri);
   };
 
+  // spec §6: "Compartilhar passaporte" na Econômica (com a cobrança ligada) abre o paywall 8f; senão vai ao dossiê (PDF/envio).
+  const share = () => {
+    const pw = useApp.getState().paywallFor('compartilhar');
+    if (pw) router.push(`/planos?gatilho=${pw}` as never);
+    else router.push('/dossie');
+  };
   const actions: [IconName, string, string, () => void][] = [
     ['doc', 'Dossiê para o veterinário', 'Um resumo com vacinas, peso, alimentação e observações do diário. Mostre na consulta ou envie em PDF.', () => router.push('/dossie')],
+    ['share', 'Compartilhar passaporte', `Mande o passaporte ${art(pet).do} ${pet.name} para a família ou para o veterinário.`, share],
+    ['plane', 'Milhas, viagens e loja', 'Veja o saldo, viaje no mapa, vista o avatar e confira o ranking.', () => router.push('/mapa')],
     ['suitcase', 'Vou viajar', `Veja o que ${art(pet).o} ${pet.name} precisa para viajar, o que já tem e o que falta.`, () => router.push('/viagem')],
     ['scale', 'Peso e evolução', 'Registre o peso e acompanhe o gráfico mês a mês.', () => router.push('/peso')],
     ['shield', 'Saúde da raça', 'Problemas comuns na raça e como prevenir.', () => router.push('/raca' as never)],

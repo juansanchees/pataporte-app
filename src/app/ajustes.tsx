@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, Switch, View } from 'react-native';
+import { Pressable, Switch, View } from 'react-native';
 import { router } from 'expo-router';
 import { useActivePet, useApp } from '@/store/app';
 import { backend } from '@/data';
 import { Page, PageHeader } from '@/components/passport';
 import { Button, ChipRow, InfoNote, SectionTitle, T } from '@/components/ui';
 import { Icon, type IconName } from '@/art/Icon';
-import { FAMILY_PLAN, PAID_PLANS, PLANS } from '@/domain/commerce';
+import { FAMILY_PLAN, PAID_PLANS, PLANS, trialDaysLeft } from '@/domain/commerce';
+import { restore } from '@/services/purchases';
+import { track } from '@/services/analytics';
+import { CityField } from '@/components/v11/premium/common';
 import { C } from '@/theme';
 import { art } from '@/domain/words';
 import { aiEnabled, aiErrorText, testAi } from '@/services/ai';
@@ -28,9 +31,15 @@ export default function Ajustes() {
   const user = useApp((s) => s.user);
   const on = useApp((s) => s.notificationsOn);
   const pet = useActivePet();
+  const effPlan = useApp((s) => s.plan());
   const [aiMsg, setAiMsg] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
   if (!profile) return null;
-  const plan = PLANS.find((p) => p.id === profile.plan)!;
+  const plan = PLANS.find((p) => p.id === effPlan)!;
+  const days = trialDaysLeft(profile);
+  // Com PAID_PLANS = false tudo é liberado: a área de classe só aparece para testes (__DEV__).
+  const showPlans = PAID_PLANS || __DEV__;
+  const planValue = effPlan === 'economica' ? 'Econômica' : days > 0 ? `Teste · ${days} ${days === 1 ? 'dia' : 'dias'}` : 'Primeira';
   const hours = ['07:00', '09:00', '12:00', '19:00'];
   const hourLabel = `${String(profile.notifyHour).padStart(2, '0')}:00`;
 
@@ -53,6 +62,17 @@ export default function Ajustes() {
     } catch { useApp.getState().showToast('Não foi possível excluir agora. Verifique a internet.'); }
   };
 
+  const restoreNow = async () => {
+    if (restoring) return;
+    setRestoring(true);
+    try {
+      const r = await restore();
+      track('restaurar_compra', { gatilho: 'ajustes', ok: r.ok });
+      if (r.ok) { await useApp.getState().setPlan('primeira'); useApp.getState().showToast('Compra restaurada. Boa viagem na Primeira Classe!'); }
+      else useApp.getState().showToast('Não encontramos uma compra nesta conta da loja.');
+    } finally { setRestoring(false); }
+  };
+
   const runTest = async () => {
     if (!aiEnabled()) { setAiMsg('Sem chave: crie o arquivo .env com EXPO_PUBLIC_GEMINI_API_KEY e rode npx expo start -c.'); return; }
     setAiMsg('Testando…');
@@ -62,7 +82,7 @@ export default function Ajustes() {
   return (
     <Page seed={25} header={<PageHeader title="Ajustes" eyebrow="PASSAPORTE E CONTA" />}>
       <View style={{ gap: 14 }}>
-        {PAID_PLANS && <>
+        {showPlans && <>
         <View style={{ flexDirection: 'row', backgroundColor: C.sheet, borderWidth: 1, borderColor: C.line, borderRadius: 14 }}>
           <View style={{ flex: 1, padding: 14 }}>
             <T v="label" style={{ fontSize: 13 }}>SUA CLASSE</T>
@@ -73,12 +93,15 @@ export default function Ajustes() {
             <T v="label" style={{ fontSize: 13 }}>ASSENTO</T><T v="monoBold" style={{ fontSize: 20 }}>{plan.seat}</T>
           </View>
         </View>
-        <Button label={profile.plan === 'economica' ? 'Fazer upgrade de classe' : 'Trocar de classe'} icon="crown" variant="premium" onPress={() => router.push('/planos')} />
+        <Button label={effPlan === 'economica' ? 'Conhecer a Primeira Classe' : 'Ver minha classe'} icon="crown" variant="premium" onPress={() => router.push('/planos')} />
         </>}
 
         <View>
           <SectionTitle>Conta</SectionTitle>
           <Row icon="user" label={profile.name} value={user?.email} />
+          {showPlans && <Row icon="crown" label="Minha classe" value={planValue} onPress={() => router.push('/planos')} />}
+          {showPlans && <Row icon="ticket" label={restoring ? 'Restaurando…' : 'Restaurar compra'} onPress={restoreNow} />}
+          <CityField style={{ paddingVertical: 12, borderBottomWidth: 1, borderStyle: 'dashed', borderBottomColor: C.line }} />
           <Row icon="bell" label="Chamadas de embarque" right={<Switch value={on} onValueChange={(v) => useApp.getState().setNotifications(v)} trackColor={{ true: C.cover, false: C.paper3 }} thumbColor={C.goldPale} accessibilityLabel="Ativar chamadas de embarque" />} />
           <View style={{ paddingVertical: 12 }}>
             <T v="label" style={{ marginBottom: 8 }}>HORÁRIO DAS CHAMADAS</T>

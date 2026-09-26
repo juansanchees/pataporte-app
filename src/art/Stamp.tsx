@@ -76,7 +76,9 @@ export function RectStamp({ lines, color, width = 120, height = 62, rotation = 6
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const holes = useInkMask(seed, width, height);
   const total = lines.reduce((acc, _, i) => acc + (i === bigIndex ? 15 : 11), 0);
-  let y = (height - total) / 2 + 9;
+  const y0 = (height - total) / 2 + 9;
+  // posição de cada linha (sem reatribuir variável durante o render)
+  const ys = lines.map((_, i) => y0 + lines.slice(0, i).reduce((acc, __, k) => acc + (k === bigIndex ? 15 : 11), 0));
   return (
     <Svg width={width} height={height} style={{ transform: [{ rotate: `${rotation}deg` }], opacity }} accessibilityLabel={`Carimbo ${lines.join(' ')}`}>
       <Defs>
@@ -91,11 +93,9 @@ export function RectStamp({ lines, color, width = 120, height = 62, rotation = 6
         {lines.map((ln, i) => {
           const big = i === bigIndex;
           const fs = lines.length === 1 ? 11 : big ? 13 : 8;
-          const el = (
-            <SvgText key={i} x={width / 2} y={y + (big ? 2 : 0)} fill={color} fontSize={fs} fontFamily={F.monoBold} letterSpacing={big ? 0.6 : 1.1} textAnchor="middle">{ln}</SvgText>
+          return (
+            <SvgText key={i} x={width / 2} y={ys[i] + (big ? 2 : 0)} fill={color} fontSize={fs} fontFamily={F.monoBold} letterSpacing={big ? 0.6 : 1.1} textAnchor="middle">{ln}</SvgText>
           );
-          y += big ? 15 : 11;
-          return el;
         })}
       </G>
     </Svg>
@@ -112,6 +112,53 @@ export function EmptyStamp({ size = 86, label = '', rotation = 0 }: { size?: num
     <Svg width={size} height={size} viewBox="0 0 120 120" style={{ transform: [{ rotate: `${rotation}deg` }] }}>
       <Circle cx={60} cy={60} r={54} fill="none" stroke="#9A8E7C" strokeWidth={2} strokeDasharray="6 6" />
       {label ? <SvgText x={60} y={label === '?' ? 72 : 65} textAnchor="middle" fontFamily={F.monoBold} fontSize={label === '?' ? 34 : 12} fill="#8A7E6C">{label}</SvgText> : null}
+    </Svg>
+  );
+}
+
+// ------------------------------------------------------------------ v1.1: carimbos de viagem (Mapa-Viagem)
+/** Carimbo de destino pequeno (80x72): oval, círculo ou retângulo arredondado com cidade + ano. */
+export function TravelStamp({ lines, year, color, shape = 'circle', rotation = -4, width = 80 }: {
+  lines: string[]; year?: string; color: string; shape?: 'circle' | 'rect' | 'oval'; rotation?: number; width?: number;
+}) {
+  const h = (width * 72) / 80;
+  const txt = [...lines, ...(year ? [year] : [])];
+  const start = 36 - ((txt.length - 1) * 13) / 2 + 4;
+  return (
+    <Svg width={width} height={h} viewBox="0 0 80 72" style={{ transform: [{ rotate: `${rotation}deg` }] }} accessibilityLabel={`Carimbo ${lines.join(' ')}${year ? `, ${year}` : ''}`}>
+      {shape === 'rect' ? (
+        <>
+          <Rect x={3} y={5} width={74} height={62} rx={16} fill="none" stroke={color} strokeWidth={2.5} />
+          <Rect x={9} y={11} width={62} height={50} rx={11} fill="none" stroke={color} strokeWidth={1.2} strokeDasharray="2 2.5" />
+        </>
+      ) : shape === 'oval' ? (
+        <>
+          <Path d="M3 36 A37 31 0 1 0 77 36 A37 31 0 1 0 3 36 Z" fill="none" stroke={color} strokeWidth={2.5} />
+          <Path d="M9 36 A31 25 0 1 0 71 36 A31 25 0 1 0 9 36 Z" fill="none" stroke={color} strokeWidth={1.2} strokeDasharray="2 2.5" />
+        </>
+      ) : (
+        <>
+          <Circle cx={40} cy={36} r={33} fill="none" stroke={color} strokeWidth={2.5} />
+          <Circle cx={40} cy={36} r={27} fill="none" stroke={color} strokeWidth={1.2} strokeDasharray="2 2.5" />
+        </>
+      )}
+      {txt.map((t, i) => (
+        <SvgText key={i} x={40} y={start + i * 13} fill={color} fontSize={t.length > 7 ? 10.5 : 12} fontFamily={F.monoBold} letterSpacing={0.6} textAnchor="middle">{t}</SvgText>
+      ))}
+    </Svg>
+  );
+}
+
+/** Espaço vazio de carimbo de viagem ("PARIS / EM BREVE"). */
+export function EmptyTravelStamp({ lines, width = 80, color = '#655B4F' }: { lines: string[]; width?: number; color?: string }) {
+  const h = (width * 72) / 80;
+  const start = 36 - ((lines.length - 1) * 14) / 2 + 4;
+  return (
+    <Svg width={width} height={h} viewBox="0 0 80 72" accessibilityLabel={`Espaço vazio: ${lines.join(' ')}`}>
+      <Path d="M3 36 A37 31 0 1 0 77 36 A37 31 0 1 0 3 36 Z" fill="none" stroke={color} strokeWidth={1.8} strokeDasharray="5 4" />
+      {lines.map((t, i) => (
+        <SvgText key={i} x={40} y={start + i * 14} fill={color} fontSize={t.length > 7 ? 10 : 12} fontFamily={F.monoBold} textAnchor="middle">{t}</SvgText>
+      ))}
     </Svg>
   );
 }

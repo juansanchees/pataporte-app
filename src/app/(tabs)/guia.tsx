@@ -12,10 +12,10 @@ import { Icon } from '@/art/Icon';
 import { askPhoto, resolvePhotoUri } from '@/services/photos';
 import { aiEnabled, ensureAiConsent } from '@/services/ai';
 import { GUIDE_DISCLAIMER } from '@/domain/guide';
-import { LIMITS, PAID_PLANS } from '@/domain/commerce';
+import { PAID_PLANS, limitsFor } from '@/domain/commerce';
 import { risksFor } from '@/domain/breeds';
 import { ageYears, localMonth, today } from '@/domain/dates';
-import type { UrgencyLevel } from '@/domain/types';
+import type { PaywallTriggerId, UrgencyLevel } from '@/domain/types';
 import { C, F } from '@/theme';
 import { art } from '@/domain/words';
 
@@ -51,11 +51,14 @@ function Thinking() {
 export default function Guia() {
   const pet = useActivePet();
   const chat = useApp((s) => s.data.chat);
-  const plan = useApp((s) => s.profile?.plan ?? 'economica');
+  const plan = useApp((s) => s.plan());
   const { q } = useLocalSearchParams<{ q?: string }>();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(q ?? '');
+  // ?q= (atalho de outra tela) preenche a pergunta; ajuste durante o render em vez de efeito
+  const [lastQ, setLastQ] = useState(q);
+  if (q !== lastQ) { setLastQ(q); if (q) setText(q); }
   const [photo, setPhoto] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [rec, setRec] = useState(false);
@@ -66,7 +69,6 @@ export default function Guia() {
   const scroll = useRef<ScrollView>(null);
 
   useEffect(() => { setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 80); }, [chat.length, busy]);
-  useEffect(() => { if (q) setText(q); }, [q]);
   useEffect(() => {
     if (!rec) return;
     const i = setInterval(() => setSecs((s) => s + 1), 1000);
@@ -78,13 +80,26 @@ export default function Guia() {
   if (!pet) return null;
   const month = localMonth();
   const used = chat.filter((m) => m.from === 'user' && localMonth(m.at) === month).length;
-  const limit = LIMITS[plan].guideMonthly;
+  const limit = limitsFor(plan).guideMonthly;
   const risks = risksFor(pet);
   const suggestions = [...risks.slice(0, 3).map((r) => r.question), `Quanto de ração ${art(pet).o} ${pet.name} deve comer?`, 'Quais sinais são de emergência?'];
   const age = ageYears(pet.birthDate, today());
 
-  const handle = (r: { status: 'ok' | 'limit' | 'noai' | 'error'; why?: string }, retry: () => void) => {
-    if (r.status === 'limit') { useApp.getState().showToast(`Você usou as ${limit} perguntas deste mês. Elas voltam no dia 1º.`); if (PAID_PLANS) router.push('/planos'); }
+  /** Paywall da Primeira Classe (spec §6): 4ª pergunta do mês (8c) ou foto/voz na Econômica (8d). */
+  const openPaywall = (g: PaywallTriggerId) => router.push(`/planos?gatilho=${g}` as never);
+  /** Antes de mandar: com a cobrança ligada, a Econômica para na 4ª pergunta do mês ou ao anexar foto. */
+  const gate = (withMedia: boolean): boolean => {
+    const st = useApp.getState();
+    const pw = st.paywallFor('ia_4a_pergunta') ?? (withMedia ? st.paywallFor('ia_foto') : null);
+    if (pw) { openPaywall(pw); return false; }
+    return true;
+  };
+
+  const handle = (r: { status: 'ok' | 'limit' | 'noai' | 'error'; why?: string; paywall?: PaywallTriggerId }, retry: () => void) => {
+    if (r.status === 'limit') {
+      if (r.paywall) openPaywall(r.paywall);
+      else useApp.getState().showToast(`Você usou as ${limit} perguntas deste mês. Elas voltam no dia 1º.`);
+    }
     if (r.status === 'noai') useApp.getState().showToast('A resposta por voz precisa da IA ligada.');
     if (r.status === 'error') setFailed({ why: r.why ?? 'tente de novo', retry });
   };
@@ -93,6 +108,7 @@ export default function Guia() {
     const msg = (override ?? text).trim();
     const pic = att ?? photo;
     if ((!msg && !pic) || busy) return;
+    if (!gate(!!pic)) return;
     if (aiEnabled() && !(await ensureAiConsent())) return;
     setFailed(null);
     setBusy(true);
@@ -107,6 +123,7 @@ export default function Guia() {
 
   const startRec = async () => {
     if (!aiEnabled()) return useApp.getState().showToast('Para falar com o Guia por voz, a IA precisa estar ligada.');
+    if (!gate(true)) return;
     try {
       if (!(await ensureAiConsent())) return;
       const perm = await requestRecordingPermissionsAsync();
@@ -161,8 +178,8 @@ export default function Guia() {
         <Microline />
         {limit !== Infinity && (
           <View style={{ marginHorizontal: 24, marginBottom: 6, flexDirection: 'row', alignItems: 'center', backgroundColor: C.paper2, borderRadius: 10, paddingLeft: 12 }}>
-            <T v="bold" style={{ flex: 1, fontSize: 14.5, color: C.inkSoft, paddingVertical: 8 }}>{PAID_PLANS ? `Econômica · ${Math.min(used, limit)} de ${limit} perguntas no mês` : `${Math.min(used, limit)} de ${limit} perguntas neste mês`}</T>
-            {PAID_PLANS && <Pressable accessibilityRole="button" onPress={() => router.push('/planos')} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 36, paddingHorizontal: 12 }}>
+            <T v="bold" style={{ flex: 1, fontSize: 15, color: C.inkSoft, paddingVertical: 8 }}>{PAID_PLANS && plan === 'economica' ? `Econômica · ${Math.min(used, limit)} de ${limit} perguntas no mês` : `${Math.min(used, limit)} de ${limit} perguntas neste mês`}</T>
+            {PAID_PLANS && plan === 'economica' && <Pressable accessibilityRole="button" accessibilityLabel="Perguntas sem limite na Primeira Classe" onPress={() => router.push('/planos')} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingHorizontal: 12 }}>
               <Icon name="crown" size={14} color={C.goldDark} /><T v="bold" style={{ fontSize: 14, color: C.goldDark }}>Sem limite</T>
             </Pressable>}
           </View>
@@ -246,7 +263,7 @@ export default function Guia() {
         </View>
       ) : (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.paper }}>
-          <IconButton icon="camera" label="Anexar foto" onPress={() => askPhoto(setPhoto)} />
+          <IconButton icon="camera" label="Anexar foto" onPress={() => { const pw = useApp.getState().paywallFor('ia_foto'); if (pw) openPaywall(pw); else askPhoto(setPhoto); }} />
           <TextInput maxFontSizeMultiplier={1.15} value={text} onChangeText={setText} placeholder="Escreva sua pergunta…" placeholderTextColor={C.inkFaint} accessibilityLabel="Mensagem para o guia" multiline
             style={{ flex: 1, minHeight: 44, maxHeight: 110, backgroundColor: 'rgba(255,255,255,0.55)', borderBottomWidth: 2, borderBottomColor: C.inkSoft, borderTopLeftRadius: 10, borderTopRightRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontFamily: F.body, fontSize: 17, color: C.ink }} />
           {text.trim() || photo ? (

@@ -16,6 +16,29 @@ service cloud.firestore {
       allow read, delete: if request.auth != null && request.auth.uid == uid;
     }
 
+    // v1.1 · ranking por cidade/raça (temporada = mês "2026-10"). Documento público entre usuários logados,
+    // com SÓ nome do pet, espécie, raça, cidade, milhas e nível (nada do tutor). Cada um grava só o próprio
+    // documento, cujo id começa pelo uid: "{uid}_{petId}".
+    match /ranking/{season}/entries/{entryId} {
+      allow read: if request.auth != null;
+      allow delete: if request.auth != null && entryId.matches('^' + request.auth.uid + '_.+$');
+      allow create, update: if request.auth != null
+        && entryId.matches('^' + request.auth.uid + '_.+$')
+        && season.matches('^[0-9]{4}-[0-9]{2}$')
+        && request.resource.data.keys().hasOnly(['petName', 'species', 'breed', 'city', 'cityKey', 'breedKey', 'seasonMiles', 'level', 'season', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['petName', 'species', 'breed', 'city', 'cityKey', 'breedKey', 'seasonMiles', 'level', 'season'])
+        && request.resource.data.petName is string && request.resource.data.petName.size() > 0 && request.resource.data.petName.size() <= 40
+        && request.resource.data.species in ['dog', 'cat']
+        && request.resource.data.breed is string && request.resource.data.breed.size() <= 60
+        && request.resource.data.city is string && request.resource.data.city.size() <= 40
+        && request.resource.data.cityKey is string && request.resource.data.cityKey.size() <= 60
+        && request.resource.data.breedKey is string && request.resource.data.breedKey.size() <= 70
+        && request.resource.data.seasonMiles is int && request.resource.data.seasonMiles >= 0 && request.resource.data.seasonMiles <= 100000
+        && request.resource.data.level in ['bronze', 'prata', 'ouro', 'diamante']
+        && request.resource.data.season == season
+        && (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is string);
+    }
+
     match /pets/{petId} {
       allow read: if request.auth != null
         && request.auth.uid in resource.data.guardianIds;
