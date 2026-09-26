@@ -306,7 +306,7 @@ function Ring({ ratio }: { ratio: number }) {
   return (
     <Svg width={20} height={20} viewBox="0 0 20 20">
       <Circle cx={10} cy={10} r={7.5} fill="none" stroke={C.greenPale} strokeWidth={3} />
-      {ratio > 0 ? <Circle cx={10} cy={10} r={7.5} fill="none" stroke={C.green} strokeWidth={3} strokeLinecap="round" strokeDasharray={`${c * Math.min(1, ratio)} ${c}`} rotation={-90} origin="10, 10" /> : null}
+      {ratio > 0 ? <Circle cx={10} cy={10} r={7.5} fill="none" stroke={C.green} strokeWidth={3} strokeLinecap="round" strokeDasharray={`${c * Math.min(1, ratio)} ${c}`} transform="rotate(-90 10 10)" /> : null}
     </Svg>
   );
 }
@@ -349,25 +349,29 @@ function AgoraCard({ ag, now, onAct, onOpenDose }: { ag: Agora; now: Date; onAct
   const btn = lateMed ? 'Dar agora' : ag.action;
   const btnLabel = `${ag.action === 'Dar' ? 'Dar' : 'Marcar como feito'}: ${it.title}`;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${badge.toLowerCase()}. ${title}`} disabled={!lateMed} onPress={onOpenDose}
+    // o cartão e o botão "Dar/Feito" são irmãos (botão dentro de botão é inválido na web e confunde o leitor de tela)
+    <View
       style={{
         marginTop: 12, minHeight: 76, borderRadius: 22, paddingVertical: 12, paddingLeft: late ? 12 : 16, paddingRight: 14,
         flexDirection: 'row', alignItems: 'center', gap: 12,
         backgroundColor: late ? C.redPale : C.cover, borderLeftWidth: late ? 6 : 0, borderLeftColor: C.red,
         shadowColor: late ? C.red : C.cover, shadowOpacity: late ? 0.14 : 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 8 }, elevation: 4,
       }}>
-      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: late ? C.white : C.amberPale, alignItems: 'center', justifyContent: 'center' }}>
-        <HomeIcon name={kindIcon(it)} size={24} color={late ? C.red : '#7A5204'} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <T v="monoBold" numberOfLines={1} style={{ fontSize: 12, lineHeight: 17, letterSpacing: 1, color: late ? '#8E2A1B' : C.goldLight }}>{badge}</T>
-        <T v="xbold" numberOfLines={1} style={{ fontSize: 18, lineHeight: 24, color: late ? C.ink : C.white }}>{title}</T>
-      </View>
+      <Pressable accessibilityRole={lateMed ? 'button' : 'text'} accessibilityLabel={`${badge.toLowerCase()}. ${title}`} disabled={!lateMed} onPress={onOpenDose}
+        style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: late ? C.white : C.amberPale, alignItems: 'center', justifyContent: 'center' }}>
+          <HomeIcon name={kindIcon(it)} size={24} color={late ? C.red : '#7A5204'} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T v="monoBold" numberOfLines={2} style={{ fontSize: 12, lineHeight: 17, letterSpacing: 1, color: late ? '#8E2A1B' : C.goldLight }}>{badge}</T>
+          <T v="xbold" numberOfLines={2} style={{ fontSize: 18, lineHeight: 24, color: late ? C.ink : C.white }}>{title}</T>
+        </View>
+      </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={lateMed ? `Dar ${it.title} agora` : btnLabel} onPress={onAct} hitSlop={4}
         style={({ pressed }) => ({ minHeight: 48, minWidth: late ? 96 : 76, borderRadius: 24, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: late ? (pressed ? C.coralInk : C.red) : (pressed ? C.paper : C.white) })}>
         <T v="xbold" numberOfLines={1} style={{ fontSize: 16, color: late ? C.white : C.cover }}>{btn}</T>
       </Pressable>
-    </Pressable>
+    </View>
   );
 }
 

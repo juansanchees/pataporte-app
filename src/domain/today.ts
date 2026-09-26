@@ -212,7 +212,8 @@ export function nextVaccine(cares: Care[], today: string): NextVaccine | null {
 
 /** Chip "Vacinas 2 de 3": vacinas em dia (não atrasadas e já com dose) de todas as vacinas ativas. */
 export function vaccinesSummary(cares: Care[], today: string): { ok: number; total: number; label: string } {
-  const vs = cares.filter((c) => c.category === 'vacina');
+  // vacina opcional que nunca tomou (inativa e sem dose) não entra na conta: "2 de 3", não "2 de 4"
+  const vs = cares.filter((c) => c.category === 'vacina' && (c.active || !!c.lastDate || (c.history?.length ?? 0) > 0));
   const ok = vs.filter((c) => careStatus(c, today) !== 'atrasado' && (c.lastDate || (c.history?.length ?? 0) > 0)).length;
   return { ok, total: vs.length, label: `${ok} de ${vs.length}` };
 }

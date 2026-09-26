@@ -108,9 +108,11 @@ export default function Agenda() {
                   const canMark = !!care && care.nextDate === e.day && e.status !== 'em_dia';
                   const st = STATUS[e.status];
                   return (
-                    <Pressable key={e.key} accessibilityRole={e.careId ? 'button' : 'text'} disabled={!e.careId} onPress={() => open(e)}
+                    // linha e botão "Já tomou" são irmãos: botão dentro de botão é inválido na web e atrapalha o leitor de tela
+                    <View key={e.key} style={{ borderBottomWidth: 1, borderColor: C.paper3 }}>
+                    <Pressable accessibilityRole={e.careId ? 'button' : 'text'} disabled={!e.careId} onPress={() => open(e)}
                       accessibilityLabel={`${e.dayNum}, ${e.weekday}: ${e.title}. ${e.sub}. ${e.statusLabel}`}
-                      style={({ pressed }) => ({ minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderColor: C.paper3, backgroundColor: pressed ? 'rgba(239,227,200,0.6)' : 'transparent', paddingVertical: 8 })}>
+                      style={({ pressed }) => ({ minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: pressed ? 'rgba(239,227,200,0.6)' : 'transparent', paddingVertical: 8 })}>
                       <View style={{ width: 52, alignItems: 'center' }}>
                         <T v="serif" style={{ fontSize: 26, lineHeight: 30 }}>{e.dayNum}</T>
                         <T v="mono" style={{ fontSize: 13, color: C.inkSoft }}>{e.weekday}</T>
@@ -120,16 +122,17 @@ export default function Agenda() {
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <T v="xbold" numberOfLines={2} style={{ fontSize: 18, lineHeight: 23 }}>{e.title}</T>
                         <T numberOfLines={1} style={{ fontSize: 16, color: C.inkSoft }}>{e.sub}</T>
-                        {canMark && care ? (
-                          <Pressable accessibilityRole="button" accessibilityLabel={`${careWords(care.category).done}: ${care.name}`} onPress={() => useApp.getState().askStamp(care.id)} hitSlop={6}
-                            style={({ pressed }) => ({ alignSelf: 'flex-start', marginTop: 6, minHeight: 44, paddingHorizontal: 14, borderRadius: 22, backgroundColor: pressed ? C.coverDark : C.cover, flexDirection: 'row', alignItems: 'center', gap: 6 })}>
-                            <HomeIcon name="check" size={16} color={C.white} sw={3} />
-                            <T v="xbold" style={{ fontSize: 16, color: C.white }}>{careWords(care.category).done}</T>
-                          </Pressable>
-                        ) : null}
                       </View>
                       <StatusPill s={e.status} />
                     </Pressable>
+                    {canMark && care ? (
+                      <Pressable accessibilityRole="button" accessibilityLabel={`${careWords(care.category).done}: ${care.name}`} onPress={() => useApp.getState().askStamp(care.id)} hitSlop={6}
+                        style={({ pressed }) => ({ alignSelf: 'flex-start', marginLeft: 108, marginTop: -8, marginBottom: 10, minHeight: 44, paddingHorizontal: 14, borderRadius: 22, backgroundColor: pressed ? C.coverDark : C.cover, flexDirection: 'row', alignItems: 'center', gap: 6 })}>
+                        <HomeIcon name="check" size={16} color={C.white} sw={3} />
+                        <T v="xbold" style={{ fontSize: 16, color: C.white }}>{careWords(care.category).done}</T>
+                      </Pressable>
+                    ) : null}
+                    </View>
                   );
                 })}
               </View>
