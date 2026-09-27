@@ -95,10 +95,12 @@ export async function pickImage(source: 'camera' | 'library', opts: { aspect?: [
     }
     r = await ImagePicker.launchCameraAsync(common);
   } else {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted && perm.accessPrivileges !== 'limited') {
-      Alert.alert('Galeria bloqueada', 'Libere o acesso às fotos nas configurações do celular.');
-      return null;
+    if (Platform.OS === 'ios') {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted && perm.accessPrivileges !== 'limited') {
+        Alert.alert('Galeria bloqueada', 'Libere o acesso às fotos nas configurações do celular.');
+        return null;
+      }
     }
     r = await ImagePicker.launchImageLibraryAsync(common);
   }
