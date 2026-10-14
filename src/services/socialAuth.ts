@@ -24,6 +24,17 @@ export function googleAvailable(): boolean {
   return !!GOOGLE_WEB_CLIENT_ID && (Platform.OS !== 'ios' || !!GOOGLE_IOS_CLIENT_ID);
 }
 
+/** Diagnóstico (toque longo em "POSTO DE EMISSÃO" no login): por que o botão do Google aparece ou não. */
+export function googleDiagnostic(): string {
+  return [
+    `Sistema: ${Platform.OS}`,
+    `Ambiente: ${Constants.executionEnvironment}`,
+    `ID Web do Google: ${GOOGLE_WEB_CLIENT_ID ? 'ok' : 'vazio'}`,
+    `ID iOS do Google: ${GOOGLE_IOS_CLIENT_ID ? 'ok' : 'vazio'}`,
+    `Botão do Google: ${googleAvailable() ? 'sim' : 'não'}`,
+  ].join('\n');
+}
+
 /** O botão "Continuar com Apple" aparece? (iPhone, fora do Expo Go) */
 export async function appleAvailable(): Promise<boolean> {
   if (Platform.OS !== 'ios' || inExpoGo) return false;

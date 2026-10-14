@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { appleAvailable, googleAvailable } from '@/services/socialAuth';
+import { appleAvailable, googleAvailable, googleDiagnostic } from '@/services/socialAuth';
+import * as Updates from 'expo-updates';
 import { router } from 'expo-router';
 import { useApp } from '@/store/app';
 import { authErrorMessage, backend } from '@/data';
@@ -95,7 +96,9 @@ export default function Login() {
             <Emblem size={48} />
           </View>
           <View style={{ flex: 1 }}>
-            <T v="eyebrow">POSTO DE EMISSÃO</T>
+            <Pressable onLongPress={() => Alert.alert('Diagnóstico', `${googleDiagnostic()}\nModo: ${backend().mode}\nCanal: ${Updates.channel ?? '-'}\nCódigo embutido: ${Updates.isEmbeddedLaunch ? 'sim' : 'não (update)'}`)} delayLongPress={1500}>
+              <T v="eyebrow">POSTO DE EMISSÃO</T>
+            </Pressable>
             <T v="serif" style={{ fontSize: 30, lineHeight: 33 }}>{mode === 'entrar' ? 'Bem-vindo a bordo' : 'Criar sua conta'}</T>
           </View>
         </View>
