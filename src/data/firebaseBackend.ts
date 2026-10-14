@@ -11,7 +11,8 @@ import type { AuthUser, Backend, Collection } from './backend';
 
 /**
  * Configuração pública do projeto Firebase "pataporte-app" (não é segredo: a segurança vem das regras
- * do Firestore). O .env pode sobrescrever; EXPO_PUBLIC_BACKEND=local força o modo de teste no aparelho.
+ * do Firestore). O .env pode sobrescrever; EXPO_PUBLIC_BACKEND=local força o modo de teste no aparelho,
+ * mas só em desenvolvimento: no build de loja o modo de teste esconde o login com Google sem avisar ninguém.
  */
 const PATAPORTE_FIREBASE: FirebaseOptions = {
   apiKey: 'AIzaSyCt9d2Q1dOIR4-hmBM9kASBydvDTzQpvIM',
@@ -23,7 +24,7 @@ const PATAPORTE_FIREBASE: FirebaseOptions = {
 };
 
 export function firebaseConfigFromEnv(): FirebaseOptions | null {
-  if (process.env.EXPO_PUBLIC_BACKEND === 'local') return null;
+  if (__DEV__ && process.env.EXPO_PUBLIC_BACKEND === 'local') return null;
   const cfg = {
     apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
     authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
